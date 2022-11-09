@@ -155,18 +155,20 @@ class SynchableGraphicsView(QtWidgets.QGraphicsView):
     def scrollState(self, state):
         sceneWidthPercent, sceneHeightPercent = state
         x = (sceneWidthPercent * self.sceneRect().width() +
-             self.sceneRect().left())
+              self.sceneRect().left())
         y = (sceneHeightPercent * self.sceneRect().height() +
-             self.sceneRect().top())
+              self.sceneRect().top())
         self.centerOn(x, y)
 
     @property
     def zoomFactor(self):
         """Zoom scale factor (*float*)."""
+
         return self.transform().m11()
 
     @zoomFactor.setter
     def zoomFactor(self, newZoomFactor):
+   
         newZoomFactor = newZoomFactor / self.zoomFactor
         self.scale(newZoomFactor, newZoomFactor)
 
@@ -179,7 +181,7 @@ class SynchableGraphicsView(QtWidgets.QGraphicsView):
         positions.
 
         :param QWheelEvent wheelEvent: instance of |QWheelEvent|"""
-        
+   
         assert isinstance(wheelEvent, QtGui.QWheelEvent)
         if wheelEvent.modifiers() & QtCore.Qt.ControlModifier:
             
@@ -213,7 +215,7 @@ class SynchableGraphicsView(QtWidgets.QGraphicsView):
         else:
         #No modifier --> cycle through frames
 #            super(SynchableGraphicsView, self).wheelEvent(wheelEvent)
-            
+
             delta       = wheelEvent.angleDelta().y()
             if delta == 0:
                 #only accept vertical scrolling
@@ -478,6 +480,11 @@ class ImageViewer(QtWidgets.QFrame):
         """Applies a new vessel mask to the 
         |QGraphicsScene| (*QGraphicsScene*)."""
         self._scene.setVesselMask(mask)
+        
+    def setSingleVesselMask(self, mask):
+        """Applies a new vessel mask to the 
+        |QGraphicsScene| (*QGraphicsScene*)."""
+        self._scene.setSingleVesselMask(mask)
         
     def setFrameCounter(self, frameCounter, maxFrames):
         """Updates the |QLabel| (*QLabel*) that stores the frame count. """

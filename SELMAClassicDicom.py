@@ -13,6 +13,7 @@ This module contains the following classes:
 import SELMADicom
 import pydicom
 import numpy as np
+import os
 
 # ====================================================================
 
@@ -56,19 +57,18 @@ class SELMAClassicDicom(SELMADicom.SELMADicom):
         self._findVEncoding()
         self._findRescaleValues()    
         self._findFrameTypes()
-        self._findPixelSpacing()    
+        self._findPixelSpacing()   
         self._findNoiseScalingFactors()
         self._findTargets()
         
         #Get rescale values and apply
         self._rescaleFrames()
-        
+
         #Sort the frames on their type
         self._orderFramesOnType()
         
-    
     def getNoiseScalingFactors(self):
-        return self._tags['R-R Interval'], self._tags['TFE'], self._tags['TR']
+         return self._tags['R-R Interval'], self._tags['TFE'], self._tags['TR'], self._tags['Temporal resolution']
     
     ##############################################
     #Overridden functions
@@ -98,15 +98,26 @@ class SELMAClassicDicom(SELMADicom.SELMADicom):
             dcmRescaleInterceptAddress  = 0x2005, 0x100D
             dcmRescaleSlopeAddress      = 0x2005, 0x100E
             
-            
-            for i in range(self._numFrames):
-                rescaleSlope        = float(self._DCMs[i]
+            try: 
+                for i in range(self._numFrames):
+                    rescaleSlope        = float(self._DCMs[i]
                                         [dcmRescaleSlopeAddress].value)
-                rescaleIntercept    = float(self._DCMs[i]
+                    rescaleIntercept    = float(self._DCMs[i]
                                         [dcmRescaleInterceptAddress].value)
                 
-                rescaleSlopes.append(rescaleSlope)
-                rescaleIntercepts.append(rescaleIntercept)
+                    rescaleSlopes.append(rescaleSlope)
+                    rescaleIntercepts.append(rescaleIntercept)
+            except:
+                    address1                    = 0x0040, 0x9096
+                    dcmRescaleInterceptAddress  = 0x0040, 0x9224
+                    dcmRescaleSlopeAddress      = 0x0040, 0x9225
+                    
+                    for i in range(self._numFrames):
+                        rescaleSlope        = float(self._DCMs[i][address1][0][dcmRescaleSlopeAddress].value)
+                        rescaleIntercept    = float(self._DCMs[i][address1][0][dcmRescaleInterceptAddress].value)
+                    
+                        rescaleSlopes.append(rescaleSlope)
+                        rescaleIntercepts.append(rescaleIntercept)
 
 
         #Siemens
@@ -192,6 +203,10 @@ class SELMAClassicDicom(SELMADicom.SELMADicom):
                     
                         rescaleSlope        = float(self._DCMs[i]
                                             [dcmRescaleSlopeAddress].value)
+                        if rescaleSlope != 0:
+                            rescaleSlope    = 1 / rescaleSlope
+
+
                         rescaleIntercept    = float(self._DCMs[i]
                                             [dcmRescaleInterceptAddress].value)
                             
@@ -246,7 +261,7 @@ class SELMAClassicDicom(SELMADicom.SELMADicom):
     def _findVEncoding(self):
         """Gets the velocity encoding maximum in the z-direction from the DCM.
         It's assumed that this is constant for all frames."""
-        
+       
         #First try default location:
         address1    = 0x0018, 0x9197
         address2    = 0x0018, 0x9217
@@ -280,10 +295,21 @@ class SELMAClassicDicom(SELMADicom.SELMADicom):
         #Philips        
         if 'philips' in self._tags['manufacturer']:
             vencAddress                 = 0x2001, 0x101A
-            venc                        = self._DCMs[0][vencAddress].value
-            venc                        = venc[-1] 
-        
-        
+            
+            #If private location does not work default to intercept value
+            try:
+                venc                        = self._DCMs[0][vencAddress].value
+                venc                        = venc[-1] 
+            except:
+            #Try other frames
+                vencFrames = np.zeros(np.size(range(0,self._numFrames)))
+                for frameNo in range(0,self._numFrames):
+                    
+                    address1                 = 0x0040, 0x9096
+                    address2                 = 0x0040, 0x9224
+                    vencFrames[frameNo]      = -1*self._DCMs[frameNo][address1][0][address2].value
+                    
+                venc = max(vencFrames) #NOT FOOLPROOF YET!!
         #GE
         if 'ge' in self._tags['manufacturer']:
             vencAddress                 = 0x0019, 0x10CC
@@ -333,9 +359,7 @@ class SELMAClassicDicom(SELMADicom.SELMADicom):
         Method differs for each manifacturer."""
         
         self._tags['frameTypes'] = []
-        
-        # import pdb; pdb.set_trace()
-        
+       
         #Philips
         if 'philips' in self._tags['manufacturer']:
             dcmImageTypeAddress         = 0x0008, 0x0008
@@ -373,18 +397,83 @@ class SELMAClassicDicom(SELMADicom.SELMADicom):
         
         self._tags['pixelSpacing'] = ps
         
+
     def _findNoiseScalingFactors(self):
         """Find RR intervals and TFE in Dicom header, save it to the tags"""
-
+        
         # Philips
-        RR_interval = (60 / int(self._DCMs[0].HeartRate)) * 1000
-        TFE = self._DCMs[0].EchoTrainLength
-        TR = self._DCMs[0][0x0018, 0x0080].value
+        if 'philips' in self._tags['manufacturer'].lower():
+            
+            HeartRates = np.zeros((len(self._DCMs),1))
+            for i in range(self._numFrames):
+                HeartRates[i] = self._DCMs[i].HeartRate
+                
+            RR_interval = (60 / int(self._DCMs[0].HeartRate)) * 1000
+            TFE = self._DCMs[0].EchoTrainLength
+            TR = self._DCMs[0][0x0018, 0x0080].value
+            
+            Temporal_resolution = 2*TFE*TR
+            
+        # Siemens
+        if 'siemens' in self._tags['manufacturer'].lower():
+            
+            RR_intervals = np.zeros((len(self._DCMs),1))
+            for i in range(self._numFrames):
+                RR_intervals[i] = self._DCMs[i].NominalInterval
+                
+            RR_interval = np.max(RR_intervals)
+            TFE = self._DCMs[0].EchoTrainLength
+            TR = self._DCMs[0].RepetitionTime
+            
+            Temporal_resolution = TR
+            
+        # GE
+        if 'ge' in self._tags['manufacturer'].lower():
+            
+            fn = "Scan_Parameters_GE.txt"
+            fullpath = os.path.join(os.path.dirname(self._dcmFilenames[0]), fn)
+
+            with open (fullpath, "r") as info:
+                data=info.readlines()
+                RR_interval     = data[0].replace('Heart Rate:','')
+                TFE             = data[1].replace('TFE:','')
+                TR              = data[2].replace('TR:','')
+                
+            if RR_interval == "\n":
+            
+                RR_intervals = np.zeros((len(self._DCMs),1))
+                for i in range(self._numFrames):
+                    RR_intervals[i] = self._DCMs[i].NominalInterval
+                
+                RR_interval = np.max(RR_intervals)
+                
+            else:
+                
+                RR_interval = (60 / int(float(RR_interval))) * 1000
+                
+            if TFE == "\n":
+            
+                TFE = self._DCMs[0].EchoTrainLength
+                
+            else:
+                
+                TFE = float(TFE)
+                
+            if TR == "\n":
+            
+                TR = self._DCMs[0].RepetitionTime
+                
+            else:
+                
+                TR = float(TR)
+   
+            Temporal_resolution = 2*TFE*TR
         
         self._tags['R-R Interval'] = RR_interval
         self._tags['TFE'] = TFE
         self._tags['TR'] = TR
-        
+        self._tags['Temporal resolution'] = Temporal_resolution
+
     def _findTargets(self):
         """
         Saves the manufacturer specific names for the phase, velocity,
@@ -405,8 +494,8 @@ class SELMAClassicDicom(SELMADicom.SELMADicom):
         if 'siemens' in self._tags['manufacturer']:
             self._tags['targets']['phase']      = 'P'
             self._tags['targets']['velocity']   = 'V'
-            self._tags['targets']['magnitude']  = "MAG"
-            self._tags['targets']['modulus']    = "M"
+            self._tags['targets']['magnitude']  = "M"
+            self._tags['targets']['modulus']    = "MAG"
             
         #GE            
         if 'ge' in self._tags['manufacturer']:            

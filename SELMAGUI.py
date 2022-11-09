@@ -32,7 +32,15 @@ class SGMSignals(QtCore.QObject):
     #ImVar Signals
     getVarSignal        = QtCore.pyqtSignal()
     setVarSignal        = QtCore.pyqtSignal(dict)
-
+    
+    #GUIBar signals
+    toggleMaskSignal    = QtCore.pyqtSignal(np.ndarray, int) 
+    toggleVesselSignal  = QtCore.pyqtSignal(np.ndarray, np.ndarray, int)
+    toggleVesselsSignal = QtCore.pyqtSignal(np.ndarray, int)
+    YesButtonSignal     = QtCore.pyqtSignal(int) 
+    NoButtonSignal      = QtCore.pyqtSignal(int)
+    repeatSelectionSignal= QtCore.pyqtSignal(int)
+    stopSelectionSignal = QtCore.pyqtSignal(int)
 
 class SELMAMainWindow(QtWidgets.QMainWindow):
     """  """
@@ -40,8 +48,10 @@ class SELMAMainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         """:param QPixmap pixmap: |QPixmap| to display"""
         super(SELMAMainWindow, self).__init__()
+        
+        self.signalObj      = SGMSignals()
 
-        self._imageViewer = SELMAImageViewer.ImageViewer()
+        self._imageViewer = SELMAImageViewer.ImageViewer(self.signalObj)
         self.setCentralWidget(self._imageViewer)
 
         self.createActions()
@@ -51,7 +61,7 @@ class SELMAMainWindow(QtWidgets.QMainWindow):
         self.statusBar().showMessage('SELMA')
         
         #Subwindows:
-        self.signalObj      = SGMSignals()
+        
         self._imVarWindow    = SELMAGUIImVar.SelmaImVar(self.signalObj)
         
         #filenames
@@ -116,6 +126,21 @@ class SELMAMainWindow(QtWidgets.QMainWindow):
         """Passes along the mask to the imageViewer."""
         self._imageViewer.setMask(mask)
         
+    def toggleMask(self, mask, state):
+        """Passes along the mask to the imageViewer."""
+
+        self._imageViewer.toggleMask(mask, state)
+        
+    def toggleVessel(self, single_vessel, vessels_mask, state):
+        """Passes along the mask to the imageViewer."""
+
+        self._imageViewer.toggleVessel(single_vessel, vessels_mask, state)
+        
+    def toggleVessels(self, vessels_mask, state):
+        """Passes along the mask to the imageViewer."""
+
+        self._imageViewer.toggleVessels(vessels_mask, state)
+        
     def setPixmap(self, pixmap):
         """Passes along the pixmap to the imageViewer."""
         self._imageViewer.setPixmap(pixmap)
@@ -123,11 +148,22 @@ class SELMAMainWindow(QtWidgets.QMainWindow):
     def setVesselMask(self, mask):
         """Passes along the vessel mask to the imageViewer."""
         self._imageViewer.setVesselMask(mask)
+        
+    def setSingleVesselMask(self, mask):
+        """Passes along the single vessel mask to the imageViewer."""
+        self._imageViewer.setSingleVesselMask(mask)
     
     def setFrameCounter(self, frameCounter, maxFrames):
         """Passes along the frame count to the imageViewer."""
         self._imageViewer.setFrameCounter(frameCounter, maxFrames)
+        
+    def manualVesselSelection(self, axes_ratio, mask, single_vessel, vessels_mask, string):
+        """Passes along the manual selection info to the imageViewer."""
+        self._imageViewer.manualVesselSelection(axes_ratio, mask, single_vessel, vessels_mask, string)
     
+    def finishVesselSelection(self, amount_included, amount_excluded):
+        """Passes along the final manual selection info to the imageViewer."""
+        self._imageViewer.finishVesselSelection(amount_included, amount_excluded)
     '''Private'''
     # ------------------------------------------------------------------
 

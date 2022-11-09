@@ -66,12 +66,14 @@ class GraphicsScene(QtWidgets.QGraphicsScene):
     def _initUI(self, pixmapItem):
         """Set up UI elements that deal with drawing the ROIs."""
         
-        self._pixmapItem            = pixmapItem
-        self._maskPixmapItem        = QtWidgets.QGraphicsPixmapItem()
-        self._vesselPixmapItem      = QtWidgets.QGraphicsPixmapItem()
+        self._pixmapItem                = pixmapItem
+        self._maskPixmapItem            = QtWidgets.QGraphicsPixmapItem()
+        self._vesselPixmapItem          = QtWidgets.QGraphicsPixmapItem()
+        self._singleVesselPixmapItem    = QtWidgets.QGraphicsPixmapItem()
         self.addItem(self._pixmapItem)
         self.addItem(self._maskPixmapItem)
         self.addItem(self._vesselPixmapItem)
+        self.addItem(self._singleVesselPixmapItem)
         
         self._polygon               = QtGui.QPolygonF()
         self._currentPolygonItem    = None
@@ -96,7 +98,7 @@ class GraphicsScene(QtWidgets.QGraphicsScene):
     mouseMove           = QtCore.pyqtSignal(int, int)
     updateProgressBar   = QtCore.pyqtSignal(int)
     adjustContrastSignal= QtCore.pyqtSignal(int, int)
-    
+    setContrastSignal   = QtCore.pyqtSignal(int, int)
     
     #Getters:
     def getMask(self):
@@ -112,7 +114,6 @@ class GraphicsScene(QtWidgets.QGraphicsScene):
         Args:
             mask (numpy.ndarray): binary mask.
         """
-        
         #Turn the mask into a transparent pixmap with the color of _maskBrush
         maskr       = np.reshape(mask * self._maskBrush.color().redF(),
                                  (1,mask.shape[0], mask.shape[1])
@@ -140,6 +141,42 @@ class GraphicsScene(QtWidgets.QGraphicsScene):
                                          -vesselMaskPixmap.height() / 2.0)
         self._vesselPixmapItem.setZValue(2)
         self._vesselPixmapItem.show()
+
+    def setSingleVesselMask(self, mask):
+        """Adds a mask with the single segmented vessel on top of the pixmap 
+        and the ROIS.
+        
+        Args:
+            mask (numpy.ndarray): binary mask.
+        """
+
+        #Turn the mask into a transparent pixmap with the color of _maskBrush
+        maskr       = np.reshape(mask * 1,
+                                 (1,mask.shape[0], mask.shape[1])
+                                 )
+        maskg       = np.reshape(mask * 0,
+                                 (1,mask.shape[0], mask.shape[1])
+                                 )
+        maskb       = np.reshape(mask * 0,
+                                 (1,mask.shape[0], mask.shape[1])
+                                 )
+        maskalpha   = np.reshape(mask * self._maskBrush.color().alphaF(),
+                                 (1,mask.shape[0], mask.shape[1])
+                                 )
+        
+        mask = np.vstack((maskr, maskg, maskb, maskalpha))
+        mask = np.swapaxes(mask, 0,2)
+        mask = np.swapaxes(mask, 0,1)
+        
+        qimage = qimage2ndarray.array2qimage(mask, normalize = True)
+        singleVesselMaskPixmap = QtGui.QPixmap(qimage)
+        
+        #Add the vesselMask to the scene
+        self._singleVesselPixmapItem.setPixmap(singleVesselMaskPixmap)
+        self._singleVesselPixmapItem.setOffset(-singleVesselMaskPixmap.width()  / 2.0,
+                                         -singleVesselMaskPixmap.height() / 2.0)
+        self._singleVesselPixmapItem.setZValue(2)
+        self._singleVesselPixmapItem.show()
         
     
     def setMask(self, mask):
@@ -346,10 +383,11 @@ class GraphicsScene(QtWidgets.QGraphicsScene):
         x,y             = self.limitToSceneRect(event.scenePos())
         self._contrastX = x
         self._contrastY = y   
-        
+      
         #Save previous values        
         self._prevContrast      = self._contrast
-        self._prevBrightness    = self._brightness
+        self._prevBrightness    = self._brightness     
+        
         
     def changeContrast(self, event):
         """Finds the difference between the event cursor position and the start
@@ -376,12 +414,15 @@ class GraphicsScene(QtWidgets.QGraphicsScene):
         self._contrast      = min(self._contrast, 254)
         self._brightness    = max(self._brightness, -254)
         self._brightness    = min(self._brightness, 100)
-        
+
         #Send signal to imageViewer
+
         self.adjustContrastSignal.emit(self._contrast,
                                        self._brightness)
         
-        
+        self.setContrastSignal.emit(self._contrast,
+                                       self._brightness)
+
     #Auxillary
     #=================================================================
     
