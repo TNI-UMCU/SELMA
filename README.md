@@ -1,6 +1,7 @@
 ﻿# SELMA
 Trial-ready **S**mall Vess**el** MRI **Ma**rkers -- version 1.4.7
 
+This version was used to analyse the data of the Test-Retest study on 3T MRI: van Tuijl, R.J., Pham, S.D.T., Ruigrok, Y.M. et al. Reliability of velocity pulsatility in small vessels on 3Tesla MRI in the basal ganglia: a test–retest study. Magn Reson Mater Phy (2022). https://doi.org/10.1007/s10334-022-01042-2
 
 The SELMA application is used for extracting and analysing flow information in cerebral vessels. 
 
