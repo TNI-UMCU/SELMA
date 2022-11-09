@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+5#!/usr/bin/env python
 
 """
 This module contains the main function of the SELMA program.
@@ -63,22 +63,34 @@ def main():
             SDM.getVarSlot)
     SGM.mainWin.signalObj.setVarSignal.connect(
             SDM.setVarSlot)
+    
+    # Signals from GUI bar
+    SGM.mainWin.signalObj.toggleMaskSignal.connect(SGM.toggleMaskSlot)
+    SGM.mainWin.signalObj.toggleVesselSignal.connect(SGM.toggleVesselSlot)
+    SGM.mainWin.signalObj.toggleVesselsSignal.connect(SGM.toggleVesselsSlot)
+    SGM.mainWin.signalObj.YesButtonSignal.connect(SDM.YesButtonSlot)
+    SGM.mainWin.signalObj.NoButtonSignal.connect(SDM.NoButtonSlot)
+    SGM.mainWin.signalObj.repeatSelectionSignal.connect(SDM.RepeatSelectionSlot)
+    SGM.mainWin.signalObj.stopSelectionSignal.connect(SDM.StopSelectionSlot)
 
     #Signals from settings
     SGM.mainWin.settingsWindow.thresholdSignal.connect(
         SDM.thresholdMaskSlot)
 
     #Signals from processing
-    SDM.signalObject.sendVesselMaskSignal       .connect(SGM.setVesselMaskSlot)
-    SDM.signalObject.setPixmapSignal            .connect(SGM.setPixmapSlot)
-    SDM.signalObject.setProgressBarSignal       .connect(SGM.setProgressBarSlot)
-    SDM.signalObject.setFrameCountSignal        .connect(SGM.setFrameCounterSlot)
-    SDM.signalObject.sendMaskSignal             .connect(SGM.setMaskSlot)
-    SDM.signalObject.pixelValueSignal           .connect(SGM.mainWin._imageViewer.mouseHover)
-    SDM.signalObject.errorMessageSignal         .connect(SGM.mainWin.errorMessageSlot)
-    SDM.signalObject.infoMessageSignal          .connect(SGM.mainWin.infoMessageSlot)
-    SDM.signalObject.sendImVarSignal            .connect(SGM.listenForVarsSlot)
-    SDM.signalObject.setProgressLabelSignal     .connect(SGM.setProgressLabelSlot)
+    SDM.signalObject.sendVesselMaskSignal           .connect(SGM.setVesselMaskSlot)
+    SDM.signalObject.sendSingleVesselMaskSignal     .connect(SGM.setSingleVesselMaskSlot)
+    SDM.signalObject.setPixmapSignal                .connect(SGM.setPixmapSlot)
+    SDM.signalObject.setProgressBarSignal           .connect(SGM.setProgressBarSlot)
+    SDM.signalObject.setFrameCountSignal            .connect(SGM.setFrameCounterSlot)
+    SDM.signalObject.sendMaskSignal                 .connect(SGM.setMaskSlot)
+    SDM.signalObject.pixelValueSignal               .connect(SGM.mainWin._imageViewer.mouseHover)
+    SDM.signalObject.errorMessageSignal             .connect(SGM.mainWin.errorMessageSlot)
+    SDM.signalObject.infoMessageSignal              .connect(SGM.mainWin.infoMessageSlot)
+    SDM.signalObject.manualVesselSelectionSignal    .connect(SGM.manualVesselSelectionSlot)
+    SDM.signalObject.finishVesselSelectionSignal    .connect(SGM.finishVesselSelectionSlot)
+    SDM.signalObject.sendImVarSignal                .connect(SGM.listenForVarsSlot)
+    SDM.signalObject.setProgressLabelSignal         .connect(SGM.setProgressLabelSlot)
 
 
     # ---------------------------------------

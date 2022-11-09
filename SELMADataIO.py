@@ -126,11 +126,15 @@ def _makeBatchAnalysisDict(self):
                                                     'Vmean vessels'] 
     self._batchAnalysisDict['PI_mean'] = self._velocityDict[0][
                                                     'PI_norm vessels']
+    self._batchAnalysisDict['PI_median'] = self._velocityDict[0][
+                                                    'median PI_norm vessels']
             
     self._batchAnalysisDict['V_mean_SEM'] = self._velocityDict[0][
                                                     'Vmean SEM'] 
     self._batchAnalysisDict['PI_mean_SEM'] = self._velocityDict[0][
                                                     'PI_norm SEM']  
+    self._batchAnalysisDict['PI_mdiean_SEM'] = self._velocityDict[0][
+                                                    'median PI_norm SEM'] 
     self._batchAnalysisDict['Filename'] = self._dcmFilename   
 
     velocityTrace = np.zeros((self._batchAnalysisDict['No_of_vessels'],
@@ -170,9 +174,9 @@ def _writeToFile(self):
     
     #TODO: Add scan name to error message of no vessels found
     #Message if no vessels were found
-    if len(np.nonzero(self._lone_vessels)[0]) == 0:
+    if len(np.nonzero(self._clusters)[0]) == 0:
         
-        #self._signalObject.errorMessageSignal.emit("No vessels Found")
+        self._signalObject.errorMessageSignal.emit("No vessels Found")
         return
     
     #Get filename for textfile output for vesselData

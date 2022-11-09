@@ -24,9 +24,14 @@ import SELMAGUIBar
 class ImageViewer(QtWidgets.QFrame):
     """Image Viewer than can pan & zoom images (|QPixmap|\ s)."""
 
-    def __init__(self):
+    def __init__(self, signalObj):
         super(ImageViewer, self).__init__()
         self.setFrameStyle(QtWidgets.QFrame.NoFrame)
+
+        self._signalObj = signalObj
+        
+        self._contrast = 999
+        self._brightness = 999
 
         self._relativeScale = 1.0 #scale relative to other ImageViewer instances
         self._zoomFactorDelta = 1.25
@@ -40,6 +45,7 @@ class ImageViewer(QtWidgets.QFrame):
         #Connect signals
         self._scene.updateProgressBar.connect(self.setProgressBar)
         self._scene.adjustContrastSignal.connect(self.adjustDisplay)
+        self._scene.setContrastSignal.connect(self.setContrast)
         
         #GraphicsView - handles the zooming and resizing.
         self._view = SELMAGraphicsView.SynchableGraphicsView(self._scene)
@@ -91,7 +97,7 @@ class ImageViewer(QtWidgets.QFrame):
         viewLayout.addLayout(bottomLayout)
         
         #Create layout which holds right hand side bar
-        self.barWidget  = SELMAGUIBar.BarWidget()
+        self.barWidget  = SELMAGUIBar.BarWidget(self._signalObj)
         barLayout       = QtWidgets.QHBoxLayout()
         barLayout.addLayout(viewLayout)
         barLayout.addWidget(self.barWidget)
@@ -159,6 +165,11 @@ class ImageViewer(QtWidgets.QFrame):
     #Setters
     # ------------------------------------------------------------------
     
+    def setContrast(self, contrast, brightness):
+        
+        self._contrast = contrast
+        self._brightness = brightness
+    
     def setPixmap(self, array):
         """Changes the original pixmap. """
         self._originalPixmap = array
@@ -174,10 +185,14 @@ class ImageViewer(QtWidgets.QFrame):
         self._pixmapItem.setZValue(0)
         
         self._pixmapItem.setPixmap(pixmap)
-        self.fitToWindow()
+        #self.fitToWindow()
         
         #Update the scene
         self._scene.resetContrast()
+
+        if self._contrast != 999:
+            self._scene.adjustContrastSignal.emit(self._contrast,
+                                       self._brightness)
         self._scene.setActive(True)
         
 #        self._scene.setPixmap(self._pixmapItem)
@@ -187,15 +202,67 @@ class ImageViewer(QtWidgets.QFrame):
         """Applies a new mask to the |QGraphicsScene| (*QGraphicsScene*)."""
         self._scene.setMask(mask)
         
+    def toggleMask(self, mask, state):
+        """Applies a new mask to the |QGraphicsScene| (*QGraphicsScene*)."""
+
+        if state == 0:
+        
+            self._scene.setMask(mask)
+            
+        if state == 2:
+            
+            self._scene.resetMask()
+            
+    def toggleVessel(self, single_vessel, vessels_mask, state):
+        """Applies a new mask to the |QGraphicsScene| (*QGraphicsScene*)."""
+
+        if state == 0:
+        
+            vessels_mask[np.where(single_vessel == True)] = True
+            self._scene.setSingleVesselMask(single_vessel)
+            self._scene.setVesselMask(vessels_mask)
+            
+        if state == 2:
+            
+            vessels_mask[np.where(single_vessel == True)] = False
+            single_vessel = np.zeros(single_vessel.shape)
+            self._scene.setSingleVesselMask(single_vessel)
+            self._scene.setVesselMask(vessels_mask)
+            
+    def toggleVessels(self, vessels_mask, state):
+        """Applies a new mask to the |QGraphicsScene| (*QGraphicsScene*)."""
+
+        if state == 0:
+        
+            self._scene.setVesselMask(vessels_mask)
+            
+        if state == 2:
+
+            self._scene.setVesselMask(np.zeros(vessels_mask.shape))
+        
     def setVesselMask(self, mask):
         """Applies a new vessel mask to the 
         |QGraphicsScene| (*QGraphicsScene*)."""
         self._scene.setVesselMask(mask)
         
+    def setSingleVesselMask(self, mask):
+        """Applies a new single vessel mask to the 
+        |QGraphicsScene| (*QGraphicsScene*)."""
+        self._scene.setSingleVesselMask(mask)
+        
     def setFrameCounter(self, frameCounter, maxFrames):
         """Updates the |QLabel| (*QLabel*) that stores the frame count. """
         string = str(frameCounter) + " / " + str(maxFrames)
         self.frameCountLabel.setText(string)
+        
+    def manualVesselSelection(self, axes_ratio, mask, single_vessel, vessels_mask, string):
+        """Applies the manual vessel selection info to the GUIBar."""
+        self.barWidget.manualVesselSelection(axes_ratio, mask, single_vessel, vessels_mask, string)
+        
+    def finishVesselSelection(self, amount_included, amount_excluded):
+        """Applies the final manual vessel selection info to the GUIBar."""
+        self.barWidget.finalVesselSelection(amount_included, amount_excluded)
+
     
 #    @pixmap.setter
 #    def pixmap(self, pixmap):

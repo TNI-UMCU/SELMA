@@ -70,7 +70,6 @@ class SynchableGraphicsView(QtWidgets.QGraphicsView):
     
     :param int: direction of wheel.
     """
-
     #Private Signals
 
 #    transformChanged = QtCore.pyqtSignal()
@@ -90,6 +89,9 @@ class SynchableGraphicsView(QtWidgets.QGraphicsView):
     Emitted whenever the mouse wheel has been rolled. A wheelnotch is
     equal to wheel delta / 240"""
     
+    def getContrast(self, contrastFactor, brightness):
+        self._contrast = contrastFactor
+        self._birghtness = brightness
     
     def connectSbarSignals(self, slot):
         """Connect to scrollbar changed signals to synchronize panning.
@@ -146,9 +148,9 @@ class SynchableGraphicsView(QtWidgets.QGraphicsView):
     def scrollState(self, state):
         sceneWidthPercent, sceneHeightPercent = state
         x = (sceneWidthPercent * self.sceneRect().width() +
-             self.sceneRect().left())
+              self.sceneRect().left())
         y = (sceneHeightPercent * self.sceneRect().height() +
-             self.sceneRect().top())
+              self.sceneRect().top())
         self.centerOn(x, y)
 
     @property
@@ -173,7 +175,7 @@ class SynchableGraphicsView(QtWidgets.QGraphicsView):
         
         assert isinstance(wheelEvent, QtGui.QWheelEvent)
         if wheelEvent.modifiers() & QtCore.Qt.ControlModifier:
-            
+        
             #don't magnify more than 60x
             if self.zoomFactor > 60 and wheelEvent.angleDelta().y() > 0: 
                 return
@@ -192,29 +194,30 @@ class SynchableGraphicsView(QtWidgets.QGraphicsView):
             newPos = self.mapToScene(wheelEvent.pos())
             
             # Calculate new scroll percentage
-            delta = oldPos - newPos
-            deltaSceneWidthPercent = (delta.x()) / self.sceneRect().width()
-            deltaSceneHeightPercent = (delta.y()) / self.sceneRect().height()
-            sceneWidthPercent, sceneHeightPercent = self.scrollState
+            zoom_delta = oldPos - newPos
+            self._deltaSceneWidthPercent = (zoom_delta.x()) / self.sceneRect().width()
+            self._deltaSceneHeightPercent = (zoom_delta.y()) / self.sceneRect().height()
+            self._sceneWidthPercent, self._sceneHeightPercent = self.scrollState
             
             # Move to new position
-            self.scrollState = (sceneWidthPercent + deltaSceneWidthPercent,
-                                sceneHeightPercent + deltaSceneHeightPercent)
+            self.scrollState = (self._sceneWidthPercent + self._deltaSceneWidthPercent,
+                                self._sceneHeightPercent + self._deltaSceneHeightPercent)
             
         else:
         #No modifier --> cycle through frames
 #            super(SynchableGraphicsView, self).wheelEvent(wheelEvent)
-            
+
             delta       = wheelEvent.angleDelta().y()
             if delta == 0:
                 #only accept vertical scrolling
                 return
             
             direction   = delta / abs(delta) 
-            
+
             self.wheelEventSignal.emit(direction)
+
             wheelEvent.accept()
-            
+                     
 
     def keyReleaseEvent(self, keyEvent):
         """Overrides to make sure key release passed on to other classes.

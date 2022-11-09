@@ -21,6 +21,7 @@ import threading
 import SELMAData
 import SELMADataIO
 import SELMABatchAnalysis
+import SELMADataSelection
 
 # ====================================================================
 
@@ -32,17 +33,20 @@ class SDMSignals(QtCore.QObject):
     
     """
     
-    setPixmapSignal         = QtCore.pyqtSignal(np.ndarray) 
-    sendVesselMaskSignal    = QtCore.pyqtSignal(np.ndarray) 
-    sendMaskSignal          = QtCore.pyqtSignal(np.ndarray) 
-    setProgressBarSignal    = QtCore.pyqtSignal(int) 
-    setProgressLabelSignal  = QtCore.pyqtSignal(str) 
-    setFrameCountSignal     = QtCore.pyqtSignal(int, int) 
-    pixelValueSignal        = QtCore.pyqtSignal(int, int, float)
-    errorMessageSignal      = QtCore.pyqtSignal(str)
-    infoMessageSignal       = QtCore.pyqtSignal(str)
+    setPixmapSignal             = QtCore.pyqtSignal(np.ndarray) 
+    sendVesselMaskSignal        = QtCore.pyqtSignal(np.ndarray)
+    sendSingleVesselMaskSignal  = QtCore.pyqtSignal(np.ndarray)
+    sendMaskSignal              = QtCore.pyqtSignal(np.ndarray) 
+    setProgressBarSignal        = QtCore.pyqtSignal(int) 
+    setProgressLabelSignal      = QtCore.pyqtSignal(str) 
+    setFrameCountSignal         = QtCore.pyqtSignal(int, int) 
+    pixelValueSignal            = QtCore.pyqtSignal(int, int, float)
+    errorMessageSignal          = QtCore.pyqtSignal(str)
+    infoMessageSignal           = QtCore.pyqtSignal(str)
+    manualVesselSelectionSignal = QtCore.pyqtSignal(float, np.ndarray, np.ndarray, np.ndarray, str)
+    finishVesselSelectionSignal = QtCore.pyqtSignal(int, int)
     
-    sendImVarSignal         = QtCore.pyqtSignal(dict)
+    sendImVarSignal             = QtCore.pyqtSignal(dict)
     
 class SelmaDataModel:
     """
@@ -63,7 +67,7 @@ class SelmaDataModel:
 
         self._SDO = selmaDataObject        
 #        self._medianDiameter = medianDiameter
-        
+
         self._frameCount = 1
         self._frameMax   = 0
         
@@ -291,8 +295,10 @@ class SelmaDataModel:
             self.signalObject.errorMessageSignal.emit("No DICOM loaded.")
             return
         
+        self._BatchAnalysisFlag = False
+        
         self.analysisThread = threading.Thread(
-                                target= self._SDO.analyseVessels,
+                                target= self._SDO.analyseVessels(self._BatchAnalysisFlag),
                                 daemon = True)    
         
         self.analysisThread.start()
@@ -415,7 +421,24 @@ class SelmaDataModel:
                 self._SDO.setVelRescale(variables["velscale"])
                 
             #other variables
+            
+    def YesButtonSlot(self):
+
+        #SELMADataSelection.SELMADataSelection.VesselIncluded(self, 1)
+        self._SDO.VesselSelected(1)
         
+    def NoButtonSlot(self):
+        
+        #SELMADataSelection.SELMADataSelection.VesselIncluded(self, 0)
+        self._SDO.VesselSelected(0)
+        
+    def RepeatSelectionSlot(self):
+        
+        self._SDO.repeatSelection(0)
+        
+    def StopSelectionSlot(self):
+        
+        self._SDO.stopSelection()
         
     #Getter functions
     # ------------------------------------------------------------------    
