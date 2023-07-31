@@ -363,6 +363,7 @@ class SELMAClassicDicom(SELMADicom.SELMADicom):
         #Philips
         if 'philips' in self._tags['manufacturer']:
             dcmImageTypeAddress         = 0x0008, 0x0008
+            self._dcmInstanceNumber     = 0x0020, 0x0013 
             
             for i in range(self._numFrames):
                 frameType = self._DCMs[i][dcmImageTypeAddress].value[2]
@@ -371,6 +372,7 @@ class SELMAClassicDicom(SELMADicom.SELMADicom):
         #Siemens
         if 'siemens' in self._tags['manufacturer']:
             dcmImageTypeAddress         = 0x0008, 0x0008
+            self._dcmInstanceNumber     = 0x0020, 0x0013 
             
             for i in range(self._numFrames):
                 frameType = self._DCMs[i][dcmImageTypeAddress].value[2]
@@ -378,6 +380,7 @@ class SELMAClassicDicom(SELMADicom.SELMADicom):
             
         #GE
         if 'ge' in self._tags['manufacturer']:
+            self._dcmInstanceNumber     = 0x0020, 0x0013 
             #The program currently assumes the first half of a series consists
             #of phase frames and the second half of magnitude frames. 
             

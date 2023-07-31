@@ -1,7 +1,7 @@
 ﻿# SELMA
 Trial-ready **S**mall Vess**el** MRI **Ma**rkers -- version 2.0-beta5
 
-This version was used to harmonize the analysis of the 2D-PC data of the perforating arteries in the EUFIND study
+
 
 The SELMA application is used for extracting and analysing flow information in cerebral vessels. 
 

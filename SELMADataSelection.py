@@ -66,6 +66,8 @@ class SELMADataSelection:
         #Send included vessels back to the GUI for final selection
         self._signalObject.sendVesselMaskSignal.emit(self._IncludedVesselMask)
         
+        SELMADataIO._saveVesselMask(self, self._IncludedVesselMask)
+        
         #Send excluded vessels back to the GUI for final selection (single vessel signal is repurposed for this)
         self._signalObject.sendSingleVesselMaskSignal.emit(self._ExcludedVesselMask)
         

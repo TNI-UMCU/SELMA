@@ -437,7 +437,8 @@ class SelmaDataModel:
         self._SDO.repeatSelection(0)
         
     def StopSelectionSlot(self):
-        
+          
+    
         self._SDO.stopSelection()
         
     #Getter functions
