@@ -105,6 +105,23 @@ def saveMask(fname, mask):
     elif    ext == ".npy":
         np.save(fname, mask)
         scipy.io.savemat(fname[0:len(fname)-4], {'WMslice': mask})
+        
+        #Workaround for Linux systems
+    else:
+        np.save(fname, mask)
+        scipy.io.savemat(fname, {'WMslice': mask})
+        
+def _saveVesselMask(self, vessel_mask):
+    """Saves a vessel mask file in case of manual vessel selection. 
+
+    """
+    
+    fname = self._dcmFilename[:-4]
+    fname += "-Vessel_Mask.npy"
+
+    np.save(fname, vessel_mask)
+    scipy.io.savemat(fname[0:len(fname)-4], {'Vessel_mask': vessel_mask})
+
     
 def _makeBatchAnalysisDict(self):
     """"Makes a dictionary containing the following statistics per scan:

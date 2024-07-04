@@ -550,13 +550,14 @@ class SELMADataObject:
             Scale the corrected velocity maps with the converged standard 
             deviation obtained during the iterative outlier removal.
         """
-
+    
         magnitudeFrames     = np.asarray(
                                     self._selmaDicom.getMagnitudeFrames())
         magnitudeSNR        = div0(magnitudeFrames,
                                    self._medianRMSSTD)
         venc                = self._selmaDicom.getTags()['venc']
 
+        self._magnitudeSNR = magnitudeSNR
         self._magnitudeSNRMask = (np.mean(magnitudeSNR, axis = 0) > 2).astype(np.uint8)
         
         self._velocitySTD   = venc / np.pi * div0(1, magnitudeSNR)
@@ -576,6 +577,7 @@ class SELMADataObject:
  
         # Derived from PULSATE data sqrt(mean RR interval/single shot time)
         PULSATEFactor = 2.9085772172269087 
+        CADASILFactor = 2.75
 
         RR_interval         = self._selmaDicom.getTags()['R-R Interval']
         TFE                 = self._selmaDicom.getTags()['TFE']
@@ -591,6 +593,7 @@ class SELMADataObject:
             NoiseFactor = np.sqrt(RR_interval/Temporal_resolution)
         
         sigma               = self._getSigma() * (PULSATEFactor/NoiseFactor)
+        #sigma               = self._getSigma()
         
         if self._readFromSettings('BasalGanglia'):
         
@@ -734,7 +737,7 @@ class SELMADataObject:
         Creates an exclusion mask around the outer edges of the image with a 
         certain width.
         """
-
+        
         ignoreOuterBand         = self._readFromSettings('ignoreOuterBand')
         self._outerBandMask     = np.zeros(self._mask.shape)
         if not ignoreOuterBand:
@@ -1229,6 +1232,19 @@ class SELMADataObject:
         magFrames       = np.asarray(self._selmaDicom.getMagnitudeFrames())
         
         iMblob          = self._posMagClusters - self._negMagClusters 
+
+        meanMagnitudeSNR    = np.mean(self._magnitudeSNR, axis=0) * self._mask
+        meanMagnitudeSNR    = meanMagnitudeSNR[np.nonzero(meanMagnitudeSNR)].mean()
+
+        meanMagnitudeSNR_vessels    = np.mean(self._magnitudeSNR, axis=0) * self._vesselMask
+        meanMagnitudeSNR_vessels    = meanMagnitudeSNR_vessels[np.nonzero(meanMagnitudeSNR_vessels)].mean()
+
+        meanVelocitySNR    = np.abs(self._velocitySNR) * self._mask
+        meanVelocitySNR    = meanVelocitySNR[np.nonzero(meanVelocitySNR)].mean()
+
+        meanVelocitySNR_vessels    = np.abs(self._velocitySNR) * self._vesselMask
+        meanVelocitySNR_vessels    = meanVelocitySNR_vessels[np.nonzero(meanVelocitySNR_vessels)].mean()
+   
         
         #Keep track of the progress to emit to the progressbar
         i       = 0 
@@ -1341,6 +1357,11 @@ class SELMADataObject:
         velocity_dict['PI_norm SEM']            = round(self._allsemPI, 4)
         velocity_dict['median PI_norm SEM']     = round(self._allsemPI_median, 4)
         velocity_dict['No. BG mask pixels']     = sum(sum(self._mask == 1))
+        
+        velocity_dict['mean SNR magnitude mask'] = round(meanMagnitudeSNR, 4)
+        velocity_dict['mean SNR magnitude vessels'] = round(meanMagnitudeSNR_vessels, 4)
+        velocity_dict['mean SNR velocity mask'] = round(meanVelocitySNR, 4)
+        velocity_dict['mean SNR velocity vessels'] = round(meanVelocitySNR_vessels, 4)
   
         self._velocityDict[0] = velocity_dict
         

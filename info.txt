@@ -1,4 +1,4 @@
 UMCu
 SELMA
-2.0-beta5
+2.0
 
