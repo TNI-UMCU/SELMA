@@ -1,4 +1,4 @@
-5#!/usr/bin/env python
+#!/usr/bin/env python
 
 """
 This module contains the main function of the SELMA program.

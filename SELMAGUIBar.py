@@ -40,9 +40,22 @@ class BarWidget(QtWidgets.QWidget):
         self.clusterLabel   = QtWidgets.QLabel(
             "Select clustering...") # Potentially change label?
         self.clusterSelect = QtWidgets.QComboBox()
-        self.clusterSelect.addItems(["Basal Ganglia",
+        self.clusterSelect.addItems([" ",
+                                     "Basal Ganglia",
                                      "Semioval Centre",
                                      "Advanced Clustering"])
+        
+        # Initialise GUI bar settings
+        
+        self.settings.setValue('BasalGanglia',          'false')
+        self.settings.setValue('SemiovalCentre',        'false')
+        self.settings.setValue('AdvancedClustering',    'false')
+        
+        self.settings.setValue('PositiveMagnitude',     'false') 
+        self.settings.setValue('NegativeMagnitude',     'false') 
+        self.settings.setValue('IsointenseMagnitude',   'false') 
+        self.settings.setValue('PositiveFlow',          'false') 
+        self.settings.setValue('NegativeFlow',          'false')
  
         self.clusterSelect.activated.connect(self.switchClustering)
 
@@ -166,7 +179,11 @@ class BarWidget(QtWidgets.QWidget):
       
         idx     = self.clusterSelect.currentIndex()
         
-        if idx == 0: #Basal Ganglia
+        if idx == 0: # No clustering selected
+            self._signalObject.errorMessageSignal.emit(
+            "Please select clustering setting before starting analysis.")
+        
+        elif idx == 1: #Basal Ganglia
             self.settings.setValue('BasalGanglia',          'true')
             self.settings.setValue('SemiovalCentre',        'false')
             self.settings.setValue('AdvancedClustering',    'false')
@@ -178,7 +195,7 @@ class BarWidget(QtWidgets.QWidget):
             self.settings.setValue('NegativeFlow',          'false')
             
             self.customClustering.close()
-        elif idx == 1: #Semioval Centre
+        elif idx == 2: #Semioval Centre
             self.settings.setValue('BasalGanglia',          'false')
             self.settings.setValue('SemiovalCentre',        'true')
             self.settings.setValue('AdvancedClustering',    'false')
@@ -190,7 +207,7 @@ class BarWidget(QtWidgets.QWidget):
             self.settings.setValue('NegativeFlow',          'true')
             
             self.customClustering.close()
-        elif idx == 2: #Advanced Clustering
+        elif idx == 3: #Advanced Clustering
             self.settings.setValue('BasalGanglia',          'false')
             self.settings.setValue('SemiovalCentre',        'false')
             self.settings.setValue('AdvancedClustering',    'true')

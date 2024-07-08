@@ -11,6 +11,7 @@ This module contains the following classes:
 
 from PyQt5 import (QtCore, QtGui, QtWidgets)
 import os
+import SELMAGUIBar
 
 # ====================================================================
 class QHLine(QtWidgets.QFrame):
@@ -868,6 +869,7 @@ class SelmaSettings(QtWidgets.QWidget):
         
         
         # Confidence interval
+
         
         confidenceInter = self.mainTab.confidenceInterEdit.text()
         try: 
@@ -1228,8 +1230,7 @@ class SelmaSettings(QtWidgets.QWidget):
         # settings.setValue('IsointenseMagnitude',    IsointenseMagnitude)
         # settings.setValue('PositiveFlow',           PositiveFlow)
         # settings.setValue('NegativeFlow',           NegativeFlow)
-        
-        #import pdb; pdb.set_trace()
+
         #Send signals
         self.thresholdSignal.emit()
         
@@ -1243,9 +1244,21 @@ class SelmaSettings(QtWidgets.QWidget):
         
         settings = QtCore.QSettings(COMPANY, APPNAME)
         settings.clear()
+        
+        settings.setValue('BasalGanglia',          'false')
+        settings.setValue('SemiovalCentre',        'false')
+        settings.setValue('AdvancedClustering',    'false')
+        
+        settings.setValue('PositiveMagnitude',     'false') 
+        settings.setValue('NegativeMagnitude',     'false') 
+        settings.setValue('IsointenseMagnitude',   'false') 
+        settings.setValue('PositiveFlow',          'false') 
+        settings.setValue('NegativeFlow',          'false')
+        
         settings.sync()
         
         self.getSettings()
+
 
 
 
