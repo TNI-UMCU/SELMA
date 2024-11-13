@@ -1,7 +1,7 @@
 ﻿# SELMA
-Trial-ready **S**mall Vess**el** MRI **Ma**rkers -- version 1.4.7
+Trial-ready **S**mall Vess**el** MRI **Ma**rkers -- version 2.1
 
-This version was used to analyse the data of the Test-Retest study on 3T MRI: van Tuijl, R.J., Pham, S.D.T., Ruigrok, Y.M. et al. Reliability of velocity pulsatility in small vessels on 3Tesla MRI in the basal ganglia: a test–retest study. Magn Reson Mater Phy (2022). https://doi.org/10.1007/s10334-022-01042-2
+
 
 The SELMA application is used for extracting and analysing flow information in cerebral vessels. 
 
@@ -89,7 +89,7 @@ After a mask is obtained, it can be easily removed by drawing a large exclusion 
 
 # Explanation of Algorithm
 
-Before starting the analysis, select the correct anatomical structure in the 'Structure' tab in the settings. This makes sure that the correct cluster settings are used in vessel detection. Without structure selection, the analysis will fail. For advanced users, there is an option to enable custom clustering. This will override the pre-applied cluster settings of the selected anatomical structure. By navigating to the Advanced Clustering tab in the settings, the user can freely select which magnitudes and flows to include in the analysis. The next step is the analysis. This can be run via the Analyse Vessels function in the Analyse menu. It can take a few minutes to perform the analysis. The current version of the program (1.4.6) doesn't have multithreaded support, so it might appear as if the program is frozen. Even if the operating system warns that the program might be stuck, please allow a few (up to 5) minutes to pass before shutting it down.
+Before starting the analysis, select the correct anatomical structure in the 'Structure' tab in the settings. This makes sure that the correct cluster settings are used in vessel detection. Without structure selection, the analysis will fail. For advanced users, there is an option to enable custom clustering. This will override the pre-applied cluster settings of the selected anatomical structure. By navigating to the Advanced Clustering tab in the settings, the user can freely select which magnitudes and flows to include in the analysis. The next step is the analysis. This can be run via the Analyse Vessels function in the Analyse menu. It can take a few minutes to perform the analysis. The current version of the program doesn't have multithreaded support, so it might appear as if the program is frozen. Even if the operating system warns that the program might be stuck, please allow a few (up to 5) minutes to pass before shutting it down.
 
 The details of the algorithm are more thoroughly described in this work: https://doi.org/10.1002/mrm.26821. Here, a short description of the steps is given.
 

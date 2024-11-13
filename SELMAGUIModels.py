@@ -48,9 +48,36 @@ class SelmaGUIModel:
         """Passes the mask to the mainWin."""
         self.mainWin.setMask(mask)
         
+    def toggleMaskSlot(self, mask, state):
+        """Passes the mask to the mainWin."""
+
+        self.mainWin.toggleMask(mask, state)
+        
+    def toggleVesselSlot(self, single_vessel, vessels_mask, state):
+        """Passes the mask to the mainWin."""
+
+        self.mainWin.toggleVessel(single_vessel, vessels_mask, state)
+        
+    def toggleVesselsSlot(self, vessels_mask, state):
+        """Passes the mask to the mainWin."""
+
+        self.mainWin.toggleVessels(vessels_mask, state)
+        
     def setVesselMaskSlot(self, mask):
         """Passes the vesselMask to the mainWin."""
         self.mainWin.setVesselMask(mask)
+        
+    def setSingleVesselMaskSlot(self, mask):
+        """Passes the single vesselMask to the mainWin."""
+        self.mainWin.setSingleVesselMask(mask)
+        
+    def manualVesselSelectionSlot(self, axes_ratio, mask, single_vessel, vessels_mask, string):
+        """Passes the manual selection info to the mainWin."""
+        self.mainWin.manualVesselSelection(axes_ratio, mask, single_vessel, vessels_mask, string)
+        
+    def finishVesselSelectionSlot(self, amount_included, amount_excluded):
+        """Passes the final manual selection info to the mainWin."""
+        self.mainWin.finishVesselSelection(amount_included, amount_excluded)
         
     def listenForVarsSlot(self, variables):
         """passes the variables to mainwin.ImVar"""

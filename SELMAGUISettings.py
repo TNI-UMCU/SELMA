@@ -11,6 +11,7 @@ This module contains the following classes:
 
 from PyQt5 import (QtCore, QtGui, QtWidgets)
 import os
+import SELMAGUIBar
 
 # ====================================================================
 class QHLine(QtWidgets.QFrame):
@@ -68,12 +69,12 @@ class SelmaSettings(QtWidgets.QWidget):
         #Add tabs
         self.tabs           = QtWidgets.QTabWidget()
         self.mainTab        = QtWidgets.QWidget()
-        self.structureTab   = QtWidgets.QWidget()
+        #self.structureTab   = QtWidgets.QWidget()
         self.ghostingTab    = QtWidgets.QWidget()
         self.nonPerpTab     = QtWidgets.QWidget()
         self.deduplicateTab = QtWidgets.QWidget()
         self.segmentTab     = QtWidgets.QWidget()
-        self.clusteringTab  = QtWidgets.QWidget()
+        #self.clusteringTab  = QtWidgets.QWidget()
         self.resetTab       = QtWidgets.QWidget()
         
         self.tabs.addTab(self.mainTab,          "General")
@@ -132,12 +133,13 @@ class SelmaSettings(QtWidgets.QWidget):
         
         self.mainTab.medDiamEdit                = QtWidgets.QLineEdit()
         self.mainTab.confidenceInterEdit        = QtWidgets.QLineEdit()
-#        self.mainTab.whiteMatterProbEdit        = QtWidgets.QLineEdit()
-        self.mainTab.mmVencBox         = QtWidgets.QCheckBox()
+#        self.mainTab.whiteMatterProbEdit       = QtWidgets.QLineEdit()
+        self.mainTab.mmVencBox                  = QtWidgets.QCheckBox()
         self.mainTab.gaussianSmoothingBox       = QtWidgets.QCheckBox()
         self.mainTab.ignoreOuterBandBox         = QtWidgets.QCheckBox()
         self.mainTab.decimalCommaBox            = QtWidgets.QCheckBox()
         self.mainTab.mmPixelBox                 = QtWidgets.QCheckBox()
+        self.mainTab.manualSelectionBox         = QtWidgets.QCheckBox()
         
         self.mainTab.label1     = QtWidgets.QLabel("Median filter diameter")
         self.mainTab.label2     = QtWidgets.QLabel("Confindence interval")
@@ -149,6 +151,8 @@ class SelmaSettings(QtWidgets.QWidget):
             "Ignore the outer 80 pixels\nof the image.")
         self.mainTab.label7     = QtWidgets.QLabel(
             "Use a decimal comma in the\noutput instead of a dot.")
+        self.mainTab.label8     = QtWidgets.QLabel(
+            "Use manual vessel selection (overrides Non-Perp and Deduplicate).")
         
         self.mainTab.label1.setToolTip(
             "Diameter of the kernel used in the median filtering operations.")
@@ -168,6 +172,10 @@ class SelmaSettings(QtWidgets.QWidget):
             "\nUse only for testing.")
         self.mainTab.label6.setToolTip(
             "Removes the outer 80 pixels at each edge from the mask. ")
+        self.mainTab.label8.setToolTip(
+            "Override standard remove non-perpendicular and deduplication\n" +
+            " algorithms with manual selection of vessels. This function\n" +
+            " is currently not applicable with batch analysis.")
 
         #Add items to layout
         self.mainTab.layout     = QtWidgets.QGridLayout()
@@ -185,6 +193,8 @@ class SelmaSettings(QtWidgets.QWidget):
                                       6,0)
         self.mainTab.layout.addWidget(self.mainTab.decimalCommaBox,
                                       7,0)
+        self.mainTab.layout.addWidget(self.mainTab.manualSelectionBox,
+                                      8,0)
         
         #Add labels to layout
         self.mainTab.layout.addWidget(self.mainTab.label1,      0,1)
@@ -194,6 +204,7 @@ class SelmaSettings(QtWidgets.QWidget):
         self.mainTab.layout.addWidget(self.mainTab.label5,      5,3)
         self.mainTab.layout.addWidget(self.mainTab.label6,      6,3)
         self.mainTab.layout.addWidget(self.mainTab.label7,      7,3)
+        self.mainTab.layout.addWidget(self.mainTab.label8,      8,3)
         
         self.mainTab.setLayout(self.mainTab.layout)
         
@@ -602,6 +613,14 @@ class SelmaSettings(QtWidgets.QWidget):
             decimalComma     = decimalComma == 'true'
         self.mainTab.decimalCommaBox.setChecked(decimalComma)
         
+        #Use manual selection
+        manualSelection      = settings.value("manualSelection")
+        if manualSelection is None:
+            manualSelection = False
+        else:
+            manualSelection     = manualSelection == 'true'
+        self.mainTab.manualSelectionBox.setChecked(manualSelection)
+        
         
         #Structure settings
         #=============================================
@@ -850,6 +869,7 @@ class SelmaSettings(QtWidgets.QWidget):
         
         
         # Confidence interval
+
         
         confidenceInter = self.mainTab.confidenceInterEdit.text()
         try: 
@@ -885,6 +905,9 @@ class SelmaSettings(QtWidgets.QWidget):
         gaussianSmoothing   = self.mainTab.gaussianSmoothingBox.isChecked()
         ignoreOuterBand     = self.mainTab.ignoreOuterBandBox.isChecked()
         decimalComma        = self.mainTab.decimalCommaBox.isChecked()
+        
+        # Manual selection
+        manualSelection        = self.mainTab.manualSelectionBox.isChecked()
         
         #=========================================
         #=========================================
@@ -1166,6 +1189,7 @@ class SelmaSettings(QtWidgets.QWidget):
         settings.setValue('gaussianSmoothing',      gaussianSmoothing)
         settings.setValue('ignoreOuterBand',        ignoreOuterBand)
         settings.setValue('decimalComma',           decimalComma)
+        settings.setValue('manualSelection',        manualSelection)
         
         #Structure selection
         # settings.setValue('BasalGanglia',           BasalGanglia)
@@ -1206,7 +1230,7 @@ class SelmaSettings(QtWidgets.QWidget):
         # settings.setValue('IsointenseMagnitude',    IsointenseMagnitude)
         # settings.setValue('PositiveFlow',           PositiveFlow)
         # settings.setValue('NegativeFlow',           NegativeFlow)
-        
+
         #Send signals
         self.thresholdSignal.emit()
         
@@ -1220,9 +1244,22 @@ class SelmaSettings(QtWidgets.QWidget):
         
         settings = QtCore.QSettings(COMPANY, APPNAME)
         settings.clear()
+        
+        settings.setValue('BasalGanglia',          'false')
+        settings.setValue('SemiovalCentre',        'false')
+        settings.setValue('MiddleCerebralArtery',  'false')
+        settings.setValue('AdvancedClustering',    'false')
+        
+        settings.setValue('PositiveMagnitude',     'false') 
+        settings.setValue('NegativeMagnitude',     'false') 
+        settings.setValue('IsointenseMagnitude',   'false') 
+        settings.setValue('PositiveFlow',          'false') 
+        settings.setValue('NegativeFlow',          'false')
+        
         settings.sync()
         
         self.getSettings()
+
 
 
 

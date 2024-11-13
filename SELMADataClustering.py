@@ -165,6 +165,7 @@ def clusterVessels(self):
 
     BasalGanglia           = self._readFromSettings('BasalGanglia')
     SemiovalCentre         = self._readFromSettings('SemiovalCentre')
+    MiddleCerebralArtery   = self._readFromSettings('MiddleCerebralArtery')
     
     if BasalGanglia:
         
@@ -182,6 +183,15 @@ def clusterVessels(self):
         IsointenseMagnitude = 1
         
         PositiveFlow = 0
+        NegativeFlow = 1
+        
+    elif MiddleCerebralArtery:
+            
+        PositiveMagnitude = 1
+        NegativeMagnitude = 0
+        IsointenseMagnitude = 0
+        
+        PositiveFlow = 1
         NegativeFlow = 1
   
     AdvancedClustering = self._readFromSettings('AdvancedClustering')

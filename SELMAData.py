@@ -10,16 +10,16 @@ of the SELMA project. It contains the following classes:
 
 # ====================================================================
 import numpy as np
-import SimpleITK as sitk
 from skimage import measure 
 from scipy.ndimage import gaussian_filter
 import scipy.signal
 import scipy.stats
 import cv2
+import threading
 
 #from multiprocessing import Pool, freeze_support, cpu_count
 
-from PyQt5 import (QtCore, QtGui, QtWidgets)
+from PyQt5 import QtCore
 
 # ====================================================================
 
@@ -30,6 +30,7 @@ import SELMADataIO
 import SELMAGUISettings
 import SELMADataClustering
 import SELMADataCalculate
+import SELMADataSelection
 
 # ====================================================================
 
@@ -66,6 +67,11 @@ class SELMADataObject:
                  dcmFilename = None,
                  classic = False):
         
+        COMPANY, APPNAME, _ = SELMAGUISettings.getInfo()
+        COMPANY             = COMPANY.split()[0]
+        APPNAME             = APPNAME.split()[0]
+        self.settings = QtCore.QSettings(COMPANY, APPNAME)
+        
         self._mask          = None
         self._NBmask        = None      #Non binary mask, no treshold applied
         self._t1            = None
@@ -88,7 +94,7 @@ class SELMADataObject:
     # 
     # ------------------------------------------------------------------
     
-    def analyseVessels(self):
+    def analyseVessels(self, BatchAnalysisFlag):
         '''
         The main algorithm of segmenting & analysing the significant vessels.
         It is split in the following parts:
@@ -102,11 +108,12 @@ class SELMADataObject:
             return
         
         if (self._readFromSettings('BasalGanglia') + 
-            self._readFromSettings('SemiovalCentre')) == 0:
+            self._readFromSettings('SemiovalCentre') + self._readFromSettings('MiddleCerebralArtery')
+            ) == 0:
             
             self._signalObject.errorMessageSignal.emit("No structure " +
-            "selected. Please select either Basal Ganglia or Semioval Centre "
-            "from the Structure tab in the settings.")
+            "selected. Please select a structure from the structure list in "+ 
+            "the bottom right hand corner.")
             
             return
  
@@ -122,6 +129,17 @@ class SELMADataObject:
                 + "selection. Please make a magnitude and flow cluster " +
                 "selection in the Advanced Clustering tab in the settings.")
                 return 
+            
+        if self._readFromSettings('manualSelection') and (BatchAnalysisFlag == False
+        and self._readFromSettings('BasalGanglia')):
+            
+            self.settings.setValue('removeNonPerp',          'false')
+            self.settings.setValue('deduplicate',            'false')
+            
+        if self._readFromSettings('MiddleCerebralArtery'):
+    
+            self.settings.setValue('removeNonPerp',          'false')
+            self.settings.setValue('deduplicate',            'false')
         
         self._signalObject.setProgressBarSignal.emit(0)
         self._signalObject.setProgressLabelSignal.emit(
@@ -132,8 +150,8 @@ class SELMADataObject:
                     "Finding significant vessels")
         self._subtractMedian()
         
-        # #Estimate STD of noise in mean Velocity
-        # self._estimateVelocitySTD()
+        #Estimate STD of noise in mean Velocity
+        #self._estimateVelocitySTD()
                 
         #Determine SNR of all voxels
         self._SNR()
@@ -156,23 +174,85 @@ class SELMADataObject:
         self._clusterVessels()
         self._removeNonPerpendicular()
         self._deduplicateVessels()
-        self._calculateParameters()
         self._createVesselMask()
         self._signalObject.setProgressBarSignal.emit(100)
-
-#        Send vessels back to the GUI
+        
+        self._Included_Vessels = []
+        self._Excluded_Vessels = []
+        self.VesselCounter = 0
+        
+        #Send vessels back to the GUI for vessel selection
         self._signalObject.sendVesselMaskSignal.emit(self._vesselMask)
+ 
+        if self._readFromSettings('manualSelection') and (BatchAnalysisFlag == False
+        and self._readFromSettings('BasalGanglia')):
+            
+            self.settings.setValue('removeNonPerp',          'false')
+            self.settings.setValue('deduplicate',            'false')
+            self._manualSelection()
+            
+            if self._clusters == []:
+                
+                self._included_vessels = []
+                self.stopSelection()
+            #self._calculateParameters()
+            
+        else:
+            
+            self._calculateParameters()
+                   
+            #make dictionary and write to disk
+            self._signalObject.setProgressLabelSignal.emit(
+                        "Writing results to disk")
+            self._makeVesselDict()
+            
+            SELMADataIO._writeToFile(self)
+        
+            self._signalObject.setProgressLabelSignal.emit("")
+        
+    def VesselSelected(self, state):
+    
+        if state == 0:
+        
+            self._Excluded_Vessels.append(self.VesselCounter)
+            
+        elif state == 1:
+        
+            self._Included_Vessels.append(self.VesselCounter)
+            
+        self.VesselCounter = self.VesselCounter + 1
+        
+        if self.VesselCounter < len(self._clusters):
+  
+            SELMADataSelection.SELMADataSelection.VesselSelection(self)
+            
+        else:
+            
+            SELMADataSelection.SELMADataSelection.FinishSelection(self)
+            
+    def repeatSelection(self, state):
+        
+        self._Excluded_Vessels = []
+        self._Included_Vessels = []
+        self.VesselCounter = state
+        self._createVesselMask()
+        
+        SELMADataSelection.SELMADataSelection.VesselSelection(self)
+        
+    def stopSelection(self):
+
+        self._clusters = self._included_vessels
+        
+        self._calculateParameters()
         
         #make dictionary and write to disk
         self._signalObject.setProgressLabelSignal.emit(
-                    "Writing results to disk")
+                        "Writing results to disk")
         self._makeVesselDict()
-        
+            
         SELMADataIO._writeToFile(self)
-    
+        
         self._signalObject.setProgressLabelSignal.emit("")
-        
-        
         
     def segmentMask(self):
         if self._t1 is None:
@@ -208,10 +288,10 @@ class SELMADataObject:
     
     def getT1(self):
         return self._t1
-    
+
     def getNoiseScalingFactors(self):
-        return self._selmaDicom.getTags()['R-R Interval'], self._selmaDicom.getTags()['TFE']
-    
+        return self._selmaDicom.getTags()['R-R Interval'], self._selmaDicom.getTags()['TFE'], self._selmaDicom.getTags()['TR'], self._selmaDicom.getTags()['Temporal resolution']
+
     def getVenc(self):
         return self._selmaDicom.getTags()['venc']
     
@@ -290,7 +370,7 @@ class SELMADataObject:
                
         alpha       = self._readFromSettings('confidenceInter') #0.05
         alpha       = 1 - alpha
-
+        
         interval    = scipy.stats.norm.interval(alpha)[1]
 
         return interval    
@@ -330,10 +410,10 @@ class SELMADataObject:
     def _calculateMedians(self):
         """Applies median filters to some necessary arrays.
         Starts a new process for each, to reduce processing time."""
- 
+
         #Prepares the data to be filtered
         diameter = int(self._getMedianDiameter())
-        
+
         #phase Frames are used in the 3T Test Retest data
         velocityFrames  = np.asarray(self._selmaDicom.getVelocityFrames()) 
         magnitudeFrames = np.asarray(self._selmaDicom.getMagnitudeFrames())
@@ -348,9 +428,7 @@ class SELMADataObject:
                                                 np.cos(phaseFrames) + 
                                                 np.sin(phaseFrames) * 1j
                                                 )
-        self._realSignal          = np.real(complexSignal)
-        self._imagSignal          = np.imag(complexSignal)
-        
+
         realSignalSTD       = np.std(np.real(complexSignal), axis = 0, ddof=1)
         imagSignalSTD       = np.std(np.imag(complexSignal), axis = 0, ddof=1)
         
@@ -391,6 +469,7 @@ class SELMADataObject:
             self._medianVelocityFrame   = scipy.signal.medfilt2d(
                                                         meanVelocityFrame,
                                                         diameter)
+        
             self._medianMagnitudeFrame  = scipy.signal.medfilt2d(
                                                         meanMagnitudeFrame,
                                                         diameter)
@@ -406,14 +485,10 @@ class SELMADataObject:
         
         velocityFrames                  = np.asarray(
                                         self._selmaDicom.getVelocityFrames())
-        magnitudeFrames                 = np.asarray(
-                                        self._selmaDicom.getMagnitudeFrames())
         self._correctedVelocityFrames   = (velocityFrames -
                                         self._medianVelocityFrame)
-        self._correctedMagnitudeFrames  = (magnitudeFrames -
-                                        self._medianMagnitudeFrame)
 
-    def _estimateVelocitySTD(self):
+    #def _estimateVelocitySTD(self):
         """ Estimate the spatial standard deviation of the noise in the 
         velocity maps. Using iterative standard deviation estimations, outliers
         in the distribution (vessels) are removed by decreasing the cutoff 
@@ -426,103 +501,42 @@ class SELMADataObject:
         is normally distributed. 
         """
         
-        SD_factor = 4 # value derived from simulated data
+        #SD_factor = 3.5 # value derived from simulated data
         
-        meanVelocity    = np.mean(self._correctedVelocityFrames, axis = 0)
-        meanMagnitudeReal   = np.mean(self._realSignal, axis = 0)
-        meanMagnitudeImag   = np.mean(self._imagSignal, axis = 0)
+        #meanVelocity    = np.mean(self._correctedVelocityFrames, axis = 0)
+
+        #voxel_coordinates = np.where(self._mask == 1)
         
-        voxel_coordinates = np.where(self._mask == 1)
-        
-        VelocityData = np.zeros((1,len(voxel_coordinates[0])))
-        MagnitudeRealData = np.zeros((1,len(voxel_coordinates[0])))
-        MagnitudeImagData = np.zeros((1,len(voxel_coordinates[0])))
-        
-        #import pdb; pdb.set_trace()
+        #VelocityData = np.zeros((1,len(voxel_coordinates[0])))
  
-        for j in range(0,len(voxel_coordinates[0])):
+        #for j in range(0,len(voxel_coordinates[0])):
         
-            VelocityData[0,j] = meanVelocity[voxel_coordinates[0][j],
-                                                    voxel_coordinates[1][j]]
-            MagnitudeRealData[0,j] = meanMagnitudeReal[voxel_coordinates[0][j],
-                                                    voxel_coordinates[1][j]]
-            MagnitudeImagData[0,j] = meanMagnitudeImag[voxel_coordinates[0][j],
-                                                    voxel_coordinates[1][j]]
+            #VelocityData[0,j] = meanVelocity[voxel_coordinates[0][j],
+                                                    #voxel_coordinates[1][j]]
             
-        CONVERGED = 0;
-        MAXRUNS = 100;
-        iRun = 0;
-        SD_vel_init = np.std(VelocityData)
-        SD_vel_prev = SD_vel_init
+        #CONVERGED = 0;
+        #MAXRUNS = 100;
+        #iRun = 0;
+        #SD_init = np.std(VelocityData)
+        #SD_prev = SD_init
         
-        while (not CONVERGED) and (iRun < MAXRUNS):
+        #while (not CONVERGED) and (iRun < MAXRUNS):
             
-            VelocityData_dummy = VelocityData
-            outlier_indices = np.where(abs(VelocityData) > 
-                                       (SD_factor * SD_vel_prev))
-            VelocityData_dummy = np.delete(VelocityData_dummy,outlier_indices)
-            SD_vel_curr = np.std(VelocityData_dummy)
+            #VelocityData_dummy = VelocityData
+            #outlier_indices = np.where(abs(VelocityData) > 
+                                       #(SD_factor * SD_prev))
+            #VelocityData_dummy = np.delete(VelocityData_dummy,outlier_indices)
+            #SD_curr = np.std(VelocityData_dummy)
             
-            if abs(SD_vel_curr - SD_vel_prev) < 10 * np.finfo(float).eps:
+            #if abs(SD_curr - SD_prev) < 10 * np.finfo(float).eps:
                 
-                CONVERGED = 1;
+                #CONVERGED = 1;
                 
             # Update counters/ stats
-            iRun = iRun + 1
-            SD_vel_prev = SD_vel_curr
+            #iRun = iRun + 1
+            #SD_prev = SD_curr
             
-        self._velocitySTD = SD_vel_curr
-            
-        CONVERGED = 0;
-        MAXRUNS = 100;
-        iRun = 0;
-        SD_mag_real_init = np.std(MagnitudeRealData)
-        SD_mag_real_prev = SD_mag_real_init
-    
-        while (not CONVERGED) and (iRun < MAXRUNS):
-            
-            MagnitudeRealData_dummy = MagnitudeRealData
-            outlier_indices = np.where(abs(MagnitudeRealData) > 
-                                        (SD_factor * SD_mag_real_prev))
-            MagnitudeRealData_dummy = np.delete(MagnitudeRealData_dummy,outlier_indices)
-            SD_mag_real_curr = np.std(MagnitudeRealData_dummy)
-            
-            if abs(SD_mag_real_curr - SD_mag_real_prev) < 10 * np.finfo(float).eps:
-                
-                CONVERGED = 1;
-                
-            # Update counters/ stats
-            iRun = iRun + 1
-            SD_mag_real_prev = SD_mag_real_curr
-            
-        self._magnitudeRealSTD = SD_mag_real_curr
-        
-        CONVERGED = 0;
-        MAXRUNS = 100;
-        iRun = 0;
-        SD_mag_imag_init = np.std(MagnitudeImagData)
-        SD_mag_imag_prev = SD_mag_imag_init
-    
-        while (not CONVERGED) and (iRun < MAXRUNS):
-            
-            MagnitudeImagData_dummy = MagnitudeImagData
-            outlier_indices = np.where(abs(MagnitudeImagData) > 
-                                        (SD_factor * SD_mag_imag_prev))
-            MagnitudeImagData_dummy = np.delete(MagnitudeImagData_dummy,outlier_indices)
-            SD_mag_imag_curr = np.std(MagnitudeImagData_dummy)
-            
-            if abs(SD_mag_imag_curr - SD_mag_imag_prev) < 10 * np.finfo(float).eps:
-                
-                CONVERGED = 1;
-                
-            # Update counters/ stats
-            iRun = iRun + 1
-            SD_mag_imag_prev = SD_mag_imag_curr
-            
-        self._magnitudeImagSTD = SD_mag_imag_curr
-        
-        self._rmsSTD              = np.sqrt( (self._magnitudeRealSTD**2 + 
-                                        self._magnitudeImagSTD**2))
+        #self._velocitySTD = SD_curr
         
             
     def _SNR(self):
@@ -543,24 +557,26 @@ class SELMADataObject:
             Scale the corrected velocity maps with the converged standard 
             deviation obtained during the iterative outlier removal.
         """
-        
-        # self._velocitySNR   = np.mean(div0(self._correctedVelocityFrames,
-        #                                         self._velocitySTD), axis=0)
-        # self._magnitudeSNR   = np.mean(div0(self._correctedMagnitudeFrames,
-        #                                         self._rmsSTD), axis=0)
-
+    
         magnitudeFrames     = np.asarray(
                                     self._selmaDicom.getMagnitudeFrames())
         magnitudeSNR        = div0(magnitudeFrames,
                                    self._medianRMSSTD)
         venc                = self._selmaDicom.getTags()['venc']
+
+        self._magnitudeSNR = magnitudeSNR
         
-        self._magnitudeSNRMask = (np.mean(magnitudeSNR, axis = 0) > 2).astype(np.uint8)
+        if self._readFromSettings('BasalGanglia'):
         
+            self._magnitudeSNRMask = (np.mean(magnitudeSNR, axis = 0) > 2).astype(np.uint8)
+            
+        elif self._readFromSettings('MiddleCerebralArtery'):
+            
+            self._magnitudeSNRMask = (np.mean(magnitudeSNR, axis = 0) > 10).astype(np.uint8)
+               
         self._velocitySTD   = venc / np.pi * div0(1, magnitudeSNR)
         self._velocitySNR   = np.mean(div0(self._correctedVelocityFrames,
-                                                self._velocitySTD), axis=0)
-
+                                                self._velocitySTD), axis=0)  
 
     def _findSignificantFlow(self):
         """Uses the velocity SNR to find vessels with significant velocity:
@@ -572,28 +588,36 @@ class SELMADataObject:
             detecting 'significant flow' is lower.
         
         """
-
+ 
         # Derived from PULSATE data sqrt(mean RR interval/single shot time)
         PULSATEFactor = 2.9085772172269087 
+        CADASILFactor = 2.75
 
         RR_interval         = self._selmaDicom.getTags()['R-R Interval']
         TFE                 = self._selmaDicom.getTags()['TFE']
         TR                  = self._selmaDicom.getTags()['TR']
+        Temporal_resolution = self._selmaDicom.getTags()['Temporal resolution']
+        
+        if RR_interval == 0:
+            
+            NoiseFactor = PULSATEFactor
+            
+        else:
 
-        # Find way to get TR from DICOM headers
-        NoiseFactor = np.sqrt(RR_interval/(2*TFE*TR))
+            NoiseFactor = np.sqrt(RR_interval/Temporal_resolution)
         
         sigma               = self._getSigma() * (PULSATEFactor/NoiseFactor)
+        #sigma               = self._getSigma()
         
-        if self._readFromSettings('BasalGanglia'):
+        if not self._readFromSettings('SemiovalCentre'):
         
             self._sigFlowPos    = (self._velocitySNR > sigma).astype(np.uint8) * self._magnitudeSNRMask
             self._sigFlowNeg    = (self._velocitySNR < -sigma).astype(np.uint8) * self._magnitudeSNRMask
             
         else:
             
-            self._sigFlowPos    = (self._velocitySNR > sigma).astype(np.uint8) * self._magnitudeSNRMask
-            self._sigFlowNeg    = (self._velocitySNR < -sigma).astype(np.uint8) * self._magnitudeSNRMask
+            self._sigFlowPos    = (self._velocitySNR > sigma).astype(np.uint8)
+            self._sigFlowNeg    = (self._velocitySNR < -sigma).astype(np.uint8)
 
         self._sigFlow       = self._sigFlowNeg + self._sigFlowPos  
   
@@ -632,9 +656,7 @@ class SELMADataObject:
                     
         
         """
-        
-        # import pdb; pdb.set_trace()
-        
+
         doGhosting      = self._readFromSettings('doGhosting')
         if not doGhosting:
             self._ghostingMask = np.zeros(self._mask.shape)
@@ -723,33 +745,20 @@ class SELMADataObject:
         ghostingMask        = ghostingMask > 0
         self._ghostingMask  = ghostingMask.astype(np.uint8)
 #        self._signalObject.sendVesselMaskSignal.emit(self._ghostingMask)
-
-        
+      
     def _removeOuterBand(self):
         """
         Creates an exclusion mask around the outer edges of the image with a 
         certain width.
         """
-
+        
         ignoreOuterBand         = self._readFromSettings('ignoreOuterBand')
         self._outerBandMask     = np.zeros(self._mask.shape)
-        
         if not ignoreOuterBand:
             
             self._outerBandMask     = np.zeros(self._mask.shape) + 1
             
             return
-        
-        wm, _ = QtWidgets.QFileDialog.getOpenFileName(
-                                                      caption =
-                                                      'Open skull stripped NIFTI')
-        
-        im = sitk.ReadImage(wm)
-        im = sitk.GetArrayFromImage(im)
-        #im = np.flip(im, 1)
-        im = np.flip(im, 0)
-        #im = np.swapaxes(im,0,2)
-        #im = np.swapaxes(im,1,2)
         
         band                            = 80    #TODO, get from settings
         # self._outerBandMask[:band, :]   = 1
@@ -760,10 +769,8 @@ class SELMADataObject:
         _,th = cv2.threshold(self._medianMagnitudeFrame.astype(np.uint8),0,
                                1,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
         
-        kernel = np.ones((5, 5), np.uint8)
-        #self._outerBandMask = cv2.erode(th,kernel)
-        
-        outerBandMask_final = cv2.erode(self._mask,kernel)
+        kernel = np.ones((band, band), np.uint8)
+        self._outerBandMask = cv2.erode(th,kernel)
         
     def _updateMask(self):
         """
@@ -819,31 +826,20 @@ class SELMADataObject:
         meanMagnitude       = np.mean(magnitudeFrames, axis = 0)
         sigma               = self._getSigma()
         
-        # medianMagnitude     = scipy.signal.medfilt2d(meanMagnitude,
-        #                                             self._medianDiameter)
+#        medianMagnitude     = scipy.signal.medfilt2d(meanMagnitude,
+#                                                     self._medianDiameter)
         
         self._sigMagPos     = (meanMagnitude -
-                                self._medianMagnitudeFrame -
-                                sigma*self._medianRMSSTD
+                               self._medianMagnitudeFrame -
+                               sigma*self._medianRMSSTD
                                 ) > 0
         self._sigMagPos     = self._sigMagPos.astype(np.uint8)
         
         self._sigMagNeg     = (meanMagnitude -
-                                self._medianMagnitudeFrame +
-                                sigma*self._medianRMSSTD
+                               self._medianMagnitudeFrame +
+                               sigma*self._medianRMSSTD
                                 ) < 0
         self._sigMagNeg     = self._sigMagNeg.astype(np.uint8)
-        
-        # if self._readFromSettings('BasalGanglia'):
-        
-        #     sigma               = 2
-            
-        # else:
-            
-        #     sigma               = 3.5
-        
-        # self._sigMagPos    = (self._magnitudeSNR > sigma).astype(np.uint8)
-        # self._sigMagNeg    = (self._magnitudeSNR < -sigma).astype(np.uint8) 
         
         #self._sigMagIso = self._sigFlow - self._sigMagNeg - self._sigMagPos
         
@@ -857,8 +853,8 @@ class SELMADataObject:
         Function moved to SELMADataClustering for clarity
         """
  
-        SELMADataClustering.clusterVessels(self)     
-    
+        SELMADataClustering.clusterVessels(self)    
+        
     def _removeNonPerpendicular(self):
         
         """
@@ -878,22 +874,14 @@ class SELMADataObject:
                 -Remove cluster based on ratio
         
         """
-   
-        if self._readFromSettings('SemiovalCentre'):
+      
+        #if not self._readFromSettings('removeNonPerp'):
             
-            self._perp_clusters = []
-            self._non_perp_clusters = []
-            self._Noperp_clusters = []
-            
-            return
-        
-        if not self._readFromSettings('removeNonPerp'):
-            
-            self._perp_clusters = []
-            self._non_perp_clusters = []
-            self._Noperp_clusters = []
+            #self._perp_clusters = []
+            #self._non_perp_clusters = []
+            #self._Noperp_clusters = []
     
-            return 
+            #return 
         
         self._non_perp_clusters = []
         self._perp_clusters = []
@@ -1017,7 +1005,7 @@ class SELMADataObject:
             check whether any of them are <6 pixels apart
             if so, remove both clusters
         """
-         
+
         # Added clauses for seperate scenarios when different settings are
         # turned on or off. This ensures the correct clusters are passed
         # through to the end
@@ -1034,7 +1022,6 @@ class SELMADataObject:
                 'deduplicate') and not (
                     self._readFromSettings('removeNonPerp')):
             
-            self._lone_vessels = self._clusters
             self._cluster_vessels = []
             
             return
@@ -1042,11 +1029,11 @@ class SELMADataObject:
         if not self._readFromSettings(
                 'deduplicate') and self._readFromSettings('removeNonPerp'):
             
-            self._lone_vessels = self._perp_clusters
+            self._clusters = self._perp_clusters
             self._cluster_vessels = []
             
             return
-        
+           
         self._lone_vessels = []
         self._cluster_vessels = []
         
@@ -1182,15 +1169,7 @@ class SELMADataObject:
             
                 del(self._lone_vessels[clusterNum - i])
                 
-        
-            
-    def _calculateParameters(self):
-        
-        """
-        Function moved to SELMADataCalculate for clarity
-        """
- 
-        SELMADataCalculate.calculateParameters(self)
+        self._clusters = self._lone_vessels
         
     def _createVesselMask(self):
         """
@@ -1201,11 +1180,22 @@ class SELMADataObject:
         mask = np.zeros(self._mask.shape,
                         dtype = np.int32)
         
-        for labels in self._included_vessels:
+        for labels in self._clusters:
             mask += labels
         
         self._vesselMask        = mask.astype(bool)
-
+             
+    def _manualSelection(self):
+        
+        SELMADataSelection.SELMADataSelection.VesselSelection(self)
+            
+    def _calculateParameters(self):       
+        """
+        Function moved to SELMADataCalculate for clarity
+        """
+ 
+        SELMADataCalculate.calculateParameters(self)
+        
     def _makeVesselDict(self):
         """Makes a dictionary containing the following statistics
         for each voxel in a vessel:
@@ -1256,7 +1246,19 @@ class SELMADataObject:
         magFrames       = np.asarray(self._selmaDicom.getMagnitudeFrames())
         
         iMblob          = self._posMagClusters - self._negMagClusters 
-        
+
+        meanMagnitudeSNR    = np.mean(self._magnitudeSNR, axis=0) * self._mask
+        meanMagnitudeSNR    = meanMagnitudeSNR[np.nonzero(meanMagnitudeSNR)].mean()
+
+        meanMagnitudeSNR_vessels    = np.mean(self._magnitudeSNR, axis=0) * self._vesselMask
+        meanMagnitudeSNR_vessels    = meanMagnitudeSNR_vessels[np.nonzero(meanMagnitudeSNR_vessels)].mean()
+
+        meanVelocitySNR    = np.abs(self._velocitySNR) * self._mask
+        meanVelocitySNR    = meanVelocitySNR[np.nonzero(meanVelocitySNR)].mean()
+
+        meanVelocitySNR_vessels    = np.abs(self._velocitySNR) * self._vesselMask
+        meanVelocitySNR_vessels    = meanVelocitySNR_vessels[np.nonzero(meanVelocitySNR_vessels)].mean()
+
         #Keep track of the progress to emit to the progressbar
         i       = 0 
         # total   = np.sum(np.asarray(self._clusters * self._sigFlowPos))
@@ -1362,10 +1364,20 @@ class SELMADataObject:
         velocity_dict['No. included vessels']   = len(self._included_vessels)
         velocity_dict['Vmean vessels']          = round(self._Vmean, 4)
         velocity_dict['PI_norm vessels']        = round(self._PI_norm, 4)
+        velocity_dict['median PI_norm vessels'] = round(self._PI_median_norm, 4)
+        
+        if not self._readFromSettings('MiddleCerebralArtery'):
 
-        velocity_dict['Vmean SEM']              = round(self._allsemV, 4)
-        velocity_dict['PI_norm SEM']            = round(self._allsemPI, 4)
+            velocity_dict['Vmean SEM']              = round(self._allsemV, 4)
+            velocity_dict['PI_norm SEM']            = round(self._allsemPI, 4)
+            velocity_dict['median PI_norm SEM']     = round(self._allsemPI_median, 4)
+            
         velocity_dict['No. BG mask pixels']     = sum(sum(self._mask == 1))
+        
+        velocity_dict['mean SNR magnitude mask'] = round(meanMagnitudeSNR, 4)
+        velocity_dict['mean SNR magnitude vessels'] = round(meanMagnitudeSNR_vessels, 4)
+        velocity_dict['mean SNR velocity mask'] = round(meanVelocitySNR, 4)
+        velocity_dict['mean SNR velocity vessels'] = round(meanVelocitySNR_vessels, 4)
   
         self._velocityDict[0] = velocity_dict
         

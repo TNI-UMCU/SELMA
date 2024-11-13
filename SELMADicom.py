@@ -13,6 +13,7 @@ This module contains the following classes:
 
 import pydicom
 import numpy as np
+import os
 import SELMAGUISettings
 from PyQt5 import QtCore
 # ====================================================================
@@ -53,6 +54,8 @@ class SELMADicom:
         
         #Sort the frames on their type
         self._orderFramesOnType()
+        
+        self._orderAllFrames()
     
         
     '''Public'''
@@ -78,6 +81,7 @@ class SELMADicom:
         if self._velocityFrames != []:
             return self._velocityFrames
         else:
+
             return self._makeVelocityFrames()[0]
     
     def getMagnitudeFrames(self):
@@ -97,13 +101,15 @@ class SELMADicom:
     
     def getRawModulusFrames(self):
         return self._rawModulusFrames
-    
+
     def getNoiseScalingFactors(self):
-        return self._tags['R-R Interval'], self._tags['TFE'], self._tage['TR']
-    
+        return self._tags['R-R Interval'], self._tags['TFE'], self._tags['TR'], self._tags['Temporal resolution']
+
     def getPixelSpacing(self):
         return self._tags['pixelSpacing']
-
+    
+    # def getRRIntervals(self):
+    #     return self._tags['R-R Interval']
         
     
     #Setter functions
@@ -248,6 +254,7 @@ class SELMADicom:
             self._dcmFrameAddress             = 0x5200, 0x9230
             self._dcmPrivateCreatorAddress    = 0x2005, 0x140f
             self._dcmImageTypeAddress         = 0x0008, 0x0008
+            self._dcmInstanceNumber           = 0x0020, 0x0013  
             
             for i in range(self._numFrames):
                 frameType = self._DCM[self._dcmFrameAddress][i]                   \
@@ -270,18 +277,68 @@ class SELMADicom:
         
         self._tags['pixelSpacing'] = ps
         
+
     def _findNoiseScalingFactors(self):
         """Find RR intervals and TFE in Dicom header, save it to the tags"""
- 
+
         # Philips
-        RR_interval = self._DCM.CardiacRRIntervalSpecified
-        TFE = self._DCM.GradientEchoTrainLength
-        TR = self._DCM[0x5200, 0x9229][0][0x0018, 0x9112][0][0x0018, 0x0080].value
-        
+        if 'philips' in self._tags['manufacturer'].lower():
+            RR_interval = self._DCM.CardiacRRIntervalSpecified
+            TFE = self._DCM.GradientEchoTrainLength
+            TR = self._DCM[0x5200, 0x9229][0][0x0018, 0x9112][0][0x0018, 0x0080].value
+            
+            Temporal_resolution = 2*TFE*TR
+            
+        # Siemens   
+        if 'siemens' in self._tags['manufacturer'].lower():
+            RR_interval = self._DCM.CardiacRRIntervalSpecified
+            TFE = self._DCM.GradientEchoTrainLength
+            TR = self._DCM[0x5200, 0x9229][0][0x0018, 0x9112][0][0x0018, 0x0080].value
+            
+        # GE
+        if 'ge' in self._tags['manufacturer'].lower():
+            
+            fn = "Scan_Parameters_GE.txt"
+            fullpath = os.path.join(os.path.dirname(self._dcmFilename), fn)
+            
+            with open (fullpath, "r") as info:
+                data=info.readlines()
+                RR_interval     = data[0].replace('Heart Rate:','')
+                TFE             = data[1].replace('TFE:','')
+                TR              = data[2].replace('TR:','')
+            
+            if RR_interval == "\n":
+            
+                RR_interval = self._DCM.CardiacRRIntervalSpecified
+                
+            else:
+                
+                RR_interval = (60 / int(float(RR_interval))) * 1000
+                
+            if TFE == "\n":
+            
+                TFE = self._DCM.GradientEchoTrainLength
+                
+            else:
+                
+                TFE = float(TFE)
+                
+            if TR == "\n":
+            
+                TR = self._DCM[0x5200, 0x9229][0][0x0018, 0x9112][0][0x0018, 0x0080].value
+                
+            else:
+                
+                TR = float(TR)
+                
+            Temporal_resolution = 2*TFE*TR
+
         self._tags['R-R Interval'] = RR_interval
         self._tags['TFE'] = TFE
         self._tags['TR'] = TR
-        
+        self._tags['Temporal resolution'] = Temporal_resolution
+
+    
     def _findTargets(self):
         """
         Saves the manufacturer specific names for the phase, velocity,
@@ -362,7 +419,11 @@ class SELMADicom:
     def _orderFramesOnType(self):
         """Uses the indices found in findFrameTypes to create an array for
         the magnitude, modulus, and velocity frames."""
-        
+      
+        self._instanceNumbers           = []  
+        self._velocityIdx               = []
+        self._magnitudeIdx              = []
+        self._modulusIdx                = []
         self._magnitudeFrames           = []
         self._rawMagnitudeFrames        = []
         self._modulusFrames             = []
@@ -380,59 +441,223 @@ class SELMADicom:
         #TODO add compatibility for other scanner manufacturers
 
         for idx in range(len(frameTypes)):
-            
-            if all(frameTypes[idx][0:3] not in mystring for mystring in targets.values()): #frameTypes[idx]
+
+            if hasattr(self, '_DCM'):
                 
-                tempFrameType = self._DCM[self._dcmFrameAddress][idx]                   \
-                                [self._dcmPrivateCreatorAddress][0]               \
-                                [self._dcmImageTypeAddress].value[3:5]
+                tempInstanceNumber = int(self._DCM[self._dcmFrameAddress][idx][self._dcmPrivateCreatorAddress][0][self._dcmInstanceNumber].value)
+                self._instanceNumbers.append(tempInstanceNumber)
                 
-                if tempFrameType[1] in targets['magnitude']:
+                if all(frameTypes[idx][0:3] not in mystring for mystring in targets.values()): #frameTypes[idx]
                     
-                    frameTypes[idx] = targets['magnitude']
+                    tempFrameType = self._DCM[self._dcmFrameAddress][idx]                   \
+                                    [self._dcmPrivateCreatorAddress][0]               \
+                                    [self._dcmImageTypeAddress].value[3:5]
                     
-                elif tempFrameType[1] in targets['modulus']:
-                    
-                    if tempFrameType[0] in targets['phase']:
-                
-                        frameTypes[idx] = targets['phase']
+                    if tempFrameType[1] in targets['magnitude']:
                         
+                        frameTypes[idx] = targets['magnitude']
+                        
+                    elif tempFrameType[1] in targets['modulus']:
+                        
+                        if tempFrameType[0] in targets['phase']:
+                    
+                            frameTypes[idx] = targets['phase']
+                            
+                        else:
+                            
+                            frameTypes[idx] = targets['modulus']
+                            
                     else:
-                        
-                        frameTypes[idx] = targets['modulus']
-                        
-                else:
                     
-                    frameTypes[idx] = targets['velocity']
-    
-        for idx in range(self._numFrames):
+                        frameTypes[idx] = targets['velocity']
+           
+            elif hasattr(self, '_DCMs'):
+                
+                tempInstanceNumber = int(self._DCMs[idx][self._dcmInstanceNumber].value)
+                self._instanceNumbers.append(tempInstanceNumber)
+                
+                if all(frameTypes[idx][0:3] not in mystring for mystring in targets.values()): #frameTypes[idx]
+                    
+                    tempFrameType = self._tags['frameTypes'][idx]
+                    
+                    if tempFrameType in targets['magnitude']:
                         
-            if targets['velocity'] in frameTypes[idx]:
-                self._velocityFrames.append(self._rescaledFrames[idx])
-                self._rawVelocityFrames.append(self._rawFrames[idx])
-                
-            elif targets['magnitude'] in frameTypes[idx]:
-                self._magnitudeFrames.append(self._rescaledFrames[idx])
-                self._rawMagnitudeFrames.append(self._rawFrames[idx])
-                
-            elif targets['modulus'] in frameTypes[idx]:
-                self._modulusFrames.append(self._rescaledFrames[idx])
-                self._rawModulusFrames.append(self._rawFrames[idx])
-                
-            elif targets['phase'] in frameTypes[idx]:
-                self._phaseFrames.append(self._rescaledFrames[idx])
-                self._rawPhaseFrames.append(self._rawFrames[idx])
+                        frameTypes[idx] = targets['magnitude']
+                        
+                    elif tempFrameType in targets['modulus']:
+                        
+                        if tempFrameType in targets['phase']:
+                    
+                            frameTypes[idx] = targets['phase']
+                            
+                        else:
+                            
+                            frameTypes[idx] = targets['modulus']
+                            
+                    else:
+                    
+                        frameTypes[idx] = targets['velocity']
+
+        for idx in range(self._numFrames):
             
-            
+            if 'philips' in self._tags['manufacturer'].lower():
+                
+                if (targets['velocity'] in frameTypes[idx] or 
+                frameTypes[idx] in targets['velocity']):
+                    self._velocityFrames.append(self._rescaledFrames[idx])
+                    self._rawVelocityFrames.append(self._rawFrames[idx])
+                    self._velocityIdx.append(idx)
+                
+                elif (frameTypes[idx] in targets['magnitude'] or
+                      targets['magnitude'] in frameTypes[idx]):
+                    self._magnitudeFrames.append(self._rescaledFrames[idx])
+                    self._rawMagnitudeFrames.append(self._rawFrames[idx])
+                    self._magnitudeIdx.append(idx)
+                
+                elif (frameTypes[idx] in targets['modulus'] or
+                      targets['modulus'] in frameTypes[idx]):
+                    self._modulusFrames.append(self._rescaledFrames[idx])
+                    self._rawModulusFrames.append(self._rawFrames[idx])
+                    self._modulusIdx.append(idx)
+                
+                elif (frameTypes[idx] in targets['phase'] or
+                      targets['phase'] in frameTypes[idx]):
+                    self._phaseFrames.append(self._rescaledFrames[idx])
+                    self._rawPhaseFrames.append(self._rawFrames[idx])
+                    self._velocityIdx.append(idx)
+                
+            else:
+                        
+                if frameTypes[idx] in targets['velocity']:
+                    self._velocityFrames.append(self._rescaledFrames[idx])
+                    self._rawVelocityFrames.append(self._rawFrames[idx])
+                    self._velocityIdx.append(idx)
+                    
+                elif frameTypes[idx] in targets['magnitude']:
+                    self._magnitudeFrames.append(self._rescaledFrames[idx])
+                    self._rawMagnitudeFrames.append(self._rawFrames[idx])
+                    self._magnitudeIdx.append(idx)
+                
+                elif frameTypes[idx] in targets['modulus']:
+                    self._modulusFrames.append(self._rescaledFrames[idx])
+                    self._rawModulusFrames.append(self._rawFrames[idx])
+                    self._modulusIdx.append(idx)
+                
+                elif frameTypes[idx] in targets['phase']:
+                    self._phaseFrames.append(self._rescaledFrames[idx])
+                    self._rawPhaseFrames.append(self._rawFrames[idx])
+                    self._velocityIdx.append(idx)
+
         self._magnitudeFrames       = np.asarray(self._magnitudeFrames)
-        self._rawMagnitudeFrames    = np.asarray(self._rawMagnitudeFrames)
+        self._rawMagnitudeFrames    = np.asarray(self._rawMagnitudeFrames)        
         self._modulusFrames         = np.asarray(self._modulusFrames)
         self._rawModulusFrames      = np.asarray(self._rawModulusFrames)
         self._velocityFrames        = np.asarray(self._velocityFrames)
         self._rawVelocityFrames     = np.asarray(self._rawVelocityFrames)
         self._phaseFrames           = np.asarray(self._phaseFrames)
         self._rawPhaseFrames        = np.asarray(self._rawPhaseFrames)
-    
+        self._instanceNumbers       = np.asarray(self._instanceNumbers)
+        
+        if 'ge' in self._tags['manufacturer'].lower():
+            
+            self._instanceNumbersVelocity = []
+            self._instanceNumbersMagnitude = []
+            self._instanceNumbersModulus = []
+            
+        else:
+        
+            self._instanceNumbersVelocity = self._instanceNumbers[np.asarray(self._velocityIdx)]
+            self._instanceNumbersMagnitude = self._instanceNumbers[np.asarray(self._magnitudeIdx)]
+
+            if self._modulusIdx != []:
+            
+                self._instanceNumbersModulus = self._instanceNumbers[np.asarray(self._modulusIdx)]
+                
+            
+            
+        
+    def _orderAllFrames(self):
+        
+        if 'ge' in self._tags['manufacturer'].lower():
+            
+            return
+                     
+        reorderMatrixVelocity = np.stack((self._velocityIdx, self._instanceNumbersVelocity))
+        
+        reorderMatrixVelocity = reorderMatrixVelocity[:, np.argsort(reorderMatrixVelocity[-1, :])]
+        
+        reorderMatrixMagnitude = np.stack((self._magnitudeIdx, self._instanceNumbersMagnitude))
+        
+        reorderMatrixMagnitude = reorderMatrixMagnitude[:, np.argsort(reorderMatrixMagnitude[-1, :])]
+
+        if self._modulusIdx != []:
+        
+            reorderMatrixModulus = np.stack((self._modulusIdx, self._instanceNumbersModulus))
+        
+            reorderMatrixModulus = reorderMatrixModulus[:, np.argsort(reorderMatrixModulus[-1, :])]
+        
+            correct_order = np.concatenate((reorderMatrixMagnitude[0,:], reorderMatrixVelocity[0,:], 
+                                        reorderMatrixModulus[0,:]))
+            
+        else:
+                
+            correct_order = np.concatenate((reorderMatrixMagnitude[0,:], reorderMatrixVelocity[0,:]))
+        
+        correct_order = correct_order.astype(int)
+                
+        
+        self._magnitudeFramesOrdered            = []
+        self._rawMagnitudeFramesOrdered         = []
+        self._modulusFramesOrdered              = []
+        self._rawModulusFramesOrdered           = []
+        self._velocityFramesOrdered             = []
+        self._rawVelocityFramesOrdered          = []
+        self._phaseFramesOrdered                = []
+        self._rawPhaseFramesOrdered             = []
+        
+        for idx in range(len(self._velocityIdx)):
+            
+            temp_mag_index = self._magnitudeIdx.index(reorderMatrixMagnitude[0,idx])
+            
+            self._magnitudeFramesOrdered.append(self._magnitudeFrames[temp_mag_index])
+            self._rawMagnitudeFramesOrdered.append(self._rawMagnitudeFrames[temp_mag_index])
+            
+            temp_vel_index = self._velocityIdx.index(reorderMatrixVelocity[0,idx])
+            
+            if len(self._phaseFrames) == 0:
+            
+                self._velocityFramesOrdered.append(self._velocityFrames[temp_vel_index])
+                self._rawVelocityFramesOrdered.append(self._rawVelocityFrames[temp_vel_index])
+                
+            else:
+            
+                self._phaseFramesOrdered.append(self._phaseFrames[temp_vel_index])
+                self._rawPhaseFramesOrdered.append(self._rawPhaseFrames[temp_vel_index])
+            
+            if self._modulusIdx != []:
+                
+                temp_mod_index = self._modulusIdx.index(reorderMatrixModulus[0,idx])
+            
+                self._modulusFramesOrdered.append(self._modulusFrames[temp_mod_index])
+                self._rawModulusFramesOrdered.append(self._rawModulusFrames[temp_mod_index])
+        
+        self._magnitudeFrames       = self._magnitudeFramesOrdered
+        self._rawMagnitudeFrames    = self._rawMagnitudeFramesOrdered     
+        self._modulusFrames         = self._modulusFramesOrdered
+        self._rawModulusFrames      = self._rawModulusFramesOrdered
+        self._velocityFrames        = self._velocityFramesOrdered
+        self._rawVelocityFrames     = self._rawVelocityFramesOrdered
+        self._phaseFrames           = self._phaseFramesOrdered
+        self._rawPhaseFrames        = self._rawPhaseFramesOrdered
+        
+        self._rescaledFramesOrdered = []
+
+        for idx in correct_order:
+            
+            self._rescaledFramesOrdered.append(self._rescaledFrames[idx])
+
+        self._rescaledFrames = self._rescaledFramesOrdered    
+        
     def _makeVelocityFrames(self):
         '''
         Construct velocity frames out of the phase frames if any phase frames

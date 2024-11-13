@@ -12,8 +12,11 @@ from PyQt5 import (QtCore)
 import SELMAData
 import SELMADataIO
 import SELMADataModels
+import threading
 
 def EnhancedBatchAnalysis(dirName, files, self):
+    
+    self._BatchAnalysisFlag = True
 
     #Make list of all suitable .dcm files
     dcms = []
@@ -85,9 +88,9 @@ def EnhancedBatchAnalysis(dirName, files, self):
             continue
         
         #Do vessel analysis
-        self._SDO.analyseVessels()
- 
         
+        self._SDO.analyseVessels(self._BatchAnalysisFlag)
+  
         #Save results
         #TODO: support for other output types.
         vesselDict, velocityDict = self._SDO.getVesselDict()
@@ -121,6 +124,8 @@ def EnhancedBatchAnalysis(dirName, files, self):
                 )
   
 def ClassicBatchAnalysis(dirName, files, self):
+    
+    self._BatchAnalysisFlag = True
     
     i       = 0 
     total   = len(files)
@@ -215,7 +220,8 @@ def ClassicBatchAnalysis(dirName, files, self):
             continue
         
         #Do vessel analysis
-        self._SDO.analyseVessels()
+
+        self._SDO.analyseVessels(self._BatchAnalysisFlag)
       
         #Save results
         #TODO: support for other output types.
